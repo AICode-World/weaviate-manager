@@ -1,7 +1,8 @@
 import { useState } from 'react';
-import { Radio, Input, Button, Upload, Spin, Card, Modal, Typography, Space, Row, Col, message } from 'antd';
+import { Radio, Input, Button, Upload, Spin, Card, Modal, Typography, Space, Row, Col, App } from 'antd';
 import { SearchOutlined, UploadOutlined } from '@ant-design/icons';
 import useAppStore from '../../stores/appStore';
+import { useQueryHistoryStore } from '../../stores/queryHistoryStore';
 import { searchNearTextWithVector, searchNearImage } from '../../services/weaviate';
 import { useI18n } from '../../i18n/I18nProvider';
 
@@ -16,6 +17,8 @@ const MultiModalSearch: React.FC = () => {
     setMultiModalResults, setMultiModalSearching,
   } = useAppStore();
   const { t } = useI18n();
+  const { message } = App.useApp();
+  const addQuery = useQueryHistoryStore((s) => s.addQuery);
 
   const [searchType, setSearchType] = useState<'text' | 'image'>('text');
   const [textQuery, setTextQuery] = useState('');
@@ -30,6 +33,7 @@ const MultiModalSearch: React.FC = () => {
     try {
       const results = await searchNearTextWithVector(client, currentCollection, textQuery, 12);
       setMultiModalResults(results);
+      addQuery({ type: 'nearText', query: textQuery, collection: currentCollection, resultCount: results.length });
     } catch (e: unknown) {
       message.error(e instanceof Error ? e.message : t('searchFail'));
     } finally {
@@ -46,6 +50,7 @@ const MultiModalSearch: React.FC = () => {
       const base64 = await fileToBase64(imageFile);
       const results = await searchNearImage(client, currentCollection, base64, 12);
       setMultiModalResults(results);
+      addQuery({ type: 'nearImage', query: `[image: ${imageFile.name}]`, collection: currentCollection, resultCount: results.length });
     } catch (e: unknown) {
       message.error(e instanceof Error ? e.message : t('imageSearchFail'));
     } finally {
@@ -87,7 +92,7 @@ const MultiModalSearch: React.FC = () => {
   };
 
   if (!currentCollection) {
-    return <div style={{ textAlign: 'center', padding: 60, color: '#9aa3b5' }}>{t('pleaseSelectCollectionFirst')}</div>;
+    return <div style={{ textAlign: 'center', padding: 60, color: 'var(--color-text-quaternary)' }}>{t('pleaseSelectCollectionFirst')}</div>;
   }
 
   return (
@@ -162,7 +167,7 @@ const MultiModalSearch: React.FC = () => {
         >
           <Spin spinning={isMultiModalSearching}>
             {multiModalResults.length === 0 ? (
-              <div style={{ textAlign: 'center', padding: 40, color: '#9aa3b5' }}>
+              <div style={{ textAlign: 'center', padding: 40, color: 'var(--color-text-quaternary)' }}>
                 {t('imageSearchHint')}
               </div>
             ) : (
@@ -178,11 +183,11 @@ const MultiModalSearch: React.FC = () => {
                         size="small"
                         cover={
                           img ? (
-                            <div style={{ height: 120, overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f1f3f9' }}>
+                            <div style={{ height: 120, overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--color-bg-sidebar)' }}>
                               <img src={img} alt={caption} style={{ maxWidth: '100%', maxHeight: 120, objectFit: 'contain' }} />
                             </div>
                           ) : (
-                            <div style={{ height: 120, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f1f3f9', color: '#d0d5e0' }}>
+                            <div style={{ height: 120, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--color-bg-sidebar)', color: 'var(--color-text-quaternary)' }}>
                               {t('noImage')}
                             </div>
                           )

@@ -1,9 +1,10 @@
 import { useEffect, useCallback } from 'react';
-import { Table, Spin, Empty, Typography, Pagination, Image, Tag, Space, Popconfirm, Tooltip } from 'antd';
-import { EditOutlined, DeleteOutlined } from '@ant-design/icons';
+import { Table, Spin, Empty, Typography, Image, Space, Popconfirm, Tooltip, Alert, Button } from 'antd';
+import type { ColumnsType } from 'antd/es/table';
+import { EditOutlined, DeleteOutlined, ExportOutlined, CloseCircleOutlined } from '@ant-design/icons';
 import useAppStore from '../../stores/appStore';
-import { fetchObjects, searchBM25, searchNearText } from '../../services/weaviate';
-import { message } from 'antd';
+import { fetchObjects, searchBM25, searchNearText, deleteObject } from '../../services/weaviate';
+import { App } from 'antd';
 import { useI18n } from '../../i18n/I18nProvider';
 
 const { Text } = Typography;
@@ -31,13 +32,13 @@ function renderCell(value: unknown): React.ReactNode {
     const mediaType = getMediaType(value);
     if (mediaType) {
       const src = toDataUri(value);
-      const s = { borderRadius: 4, objectFit: 'cover' as const, border: '1px solid #e5e8f0' };
+      const s = { borderRadius: 4, objectFit: 'cover' as const, border: '1px solid var(--color-border)' };
       if (mediaType === 'image') return <Image src={src} width={48} height={48} style={s} preview={{}} />;
       if (mediaType === 'video') return <video src={src} width={96} height={64} style={s} controls preload="metadata" />;
       if (mediaType === 'audio') return <audio src={src} controls preload="metadata" style={{ width: 140, height: 32 }} />;
     }
     if (value.length > 80) {
-      return <Tooltip title={value} overlayStyle={{ maxWidth: 500 }}>
+      return <Tooltip title={value} styles={{ root: { maxWidth: 500 } }}>
         <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block', maxWidth: 300 }}>{value}</span>
       </Tooltip>;
     }
@@ -46,7 +47,7 @@ function renderCell(value: unknown): React.ReactNode {
   if (typeof value === 'number' || typeof value === 'boolean') return <span>{String(value)}</span>;
   const str = JSON.stringify(value);
   if (str.length > 80) {
-    return <Tooltip title={str} overlayStyle={{ maxWidth: 400 }}>
+    return <Tooltip title={str} styles={{ root: { maxWidth: 400 } }}>
       <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block', maxWidth: 180 }}>{str.slice(0, 80)}…</span>
     </Tooltip>;
   }
@@ -71,6 +72,7 @@ const DataTable: React.FC<{
   onSelectionChange: (keys: string[]) => void;
 }> = ({ onEdit, onDelete, refreshKey, selectedRowKeys, onSelectionChange }) => {
   const { t } = useI18n();
+  const { message } = App.useApp();
   const {
     client, currentCollection, currentData, totalCount,
     isLoading, paginationCurrent,
@@ -106,7 +108,7 @@ const DataTable: React.FC<{
   }, [client, currentCollection, searchQuery, searchMode, setSearchResults, setSearching]);
 
   useEffect(() => {
-    if (client && currentCollection) { clearSearch(); loadData(1); }
+    if (client && currentCollection) { clearSearch(); loadData(1); onSelectionChange([]); }
   }, [currentCollection, refreshKey, client]);
 
   useEffect(() => {
@@ -127,7 +129,7 @@ const DataTable: React.FC<{
     return a.localeCompare(b);
   });
 
-  const columns = sortedKeys.map((key) => ({
+  const columns: ColumnsType<Record<string, unknown>> = sortedKeys.map((key) => ({
     title: key,
     dataIndex: key,
     key,
@@ -140,10 +142,10 @@ const DataTable: React.FC<{
     key: '_actions',
     width: 80,
     fixed: 'right' as const,
-    render: (_: unknown, record: Record<string, unknown>) => (
+    render: (_v: unknown, record: Record<string, unknown>) => (
       <Space size={4}>
         <EditOutlined
-          style={{ cursor: 'pointer', color: '#1677ff', padding: 4, borderRadius: 4 }}
+          style={{ cursor: 'pointer', color: 'var(--color-primary, #1677ff)', padding: 4, borderRadius: 4 }}
           onClick={() => onEdit(record)}
         />
         <Popconfirm title={t('confirmDeleteOne')} onConfirm={() => { const id = record.__id as string; if (id) onDelete(id); }} okText={t('delete')} cancelText={t('cancel')}>
@@ -161,11 +163,11 @@ const DataTable: React.FC<{
   });
 
   if (!currentCollection) {
-    return <div style={{ textAlign: 'center', padding: 80, color: '#6b7589' }}>{t('selectCollection')}</div>;
+    return <div style={{ textAlign: 'center', padding: 80, color: 'var(--color-text-tertiary)' }}>{t('selectCollection')}</div>;
   }
 
   return (
-    <div style={{ background: '#fff', borderRadius: 10, padding: '0 0 16px', boxShadow: '0 1px 3px rgba(26, 31, 54, 0.04), 0 4px 12px rgba(26, 31, 54, 0.04)' }}>
+    <div style={{ background: 'var(--color-bg-base)', borderRadius: 10, padding: '0 0 16px', boxShadow: 'var(--shadow-card)' }}>
       {isSearchMode && (
         <div style={{ padding: '12px 16px 0' }}>
           <Text type="secondary" style={{ fontSize: 13 }}>
@@ -183,11 +185,106 @@ const DataTable: React.FC<{
         </div>
       )}
 
+      {/* 批量操作栏 */}
+      {selectedRowKeys.length > 0 && (
+        <Alert
+          type="info"
+          showIcon
+          style={{ margin: '8px 16px 0' }}
+          message={
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
+              <span>{t('selectedRows', { n: selectedRowKeys.length })}</span>
+              <Space>
+                <Button size="small" icon={<ExportOutlined />} onClick={() => {
+                  const selectedRows = displayData.filter((row) => selectedRowKeys.includes(row.__id as string));
+                  if (selectedRows.length === 0) return;
+                  const allKeys = new Set<string>();
+                  selectedRows.forEach((row) => Object.keys(row).forEach((k) => { if (!k.startsWith('__') && k !== '_additional') allKeys.add(k); }));
+                  const headers = [...allKeys];
+                  const csvRows = [headers.join(',')];
+                  for (const row of selectedRows) {
+                    const vals = headers.map((h) => {
+                      const v = row[h];
+                      if (v === null || v === undefined) return '';
+                      if (typeof v === 'string' && v.startsWith('data:')) return t('exists');
+                      const s = String(v);
+                      return s.includes(',') || s.includes('"') ? `"${s.replace(/"/g, '""')}"` : s;
+                    });
+                    csvRows.push(vals.join(','));
+                  }
+                  const blob = new Blob(['﻿' + csvRows.join('\n')], { type: 'text/csv;charset=utf-8' });
+                  const url = URL.createObjectURL(blob);
+                  const a = document.createElement('a');
+                  a.href = url;
+                  a.download = `${currentCollection}_selected_${new Date().toISOString().slice(0, 10)}.csv`;
+                  a.click();
+                  URL.revokeObjectURL(url);
+                  message.success(t('exportDone', { n: selectedRows.length }));
+                }}>
+                  {t('exportSelected')}
+                </Button>
+                <Popconfirm
+                  title={t('confirmDeleteRows', { n: selectedRowKeys.length })}
+                  onConfirm={async () => {
+                    if (!client || !currentCollection) return;
+                    const total = selectedRowKeys.length;
+                    let success = 0, fail = 0;
+                    const hide = message.loading({ content: t('batchProgress', { current: 0, total }), key: 'bd', duration: 0 });
+                    for (let i = 0; i < selectedRowKeys.length; i++) {
+                      try { await deleteObject(client, currentCollection, selectedRowKeys[i]); success++; } catch { fail++; }
+                      message.loading({ content: t('batchProgress', { current: i + 1, total }), key: 'bd', duration: 0 });
+                    }
+                    hide();
+                    message.info(t('deleteDone', { s: success, f: fail }));
+                    onSelectionChange([]);
+                    loadData(1);
+                  }}
+                  okText={t('confirm')}
+                  cancelText={t('cancel')}
+                >
+                  <Button size="small" danger icon={<DeleteOutlined />}>
+                    {t('batchDelete')}
+                  </Button>
+                </Popconfirm>
+                <Button size="small" icon={<CloseCircleOutlined />} onClick={() => onSelectionChange([])}>
+                  {t('clearSelection')}
+                </Button>
+              </Space>
+            </div>
+          }
+        />
+      )}
+
       <Spin spinning={isLoading || isSearching}>
         <Table
           columns={columns}
           dataSource={dataSource}
-          pagination={false}
+          pagination={isSearchMode ? false : {
+            current: paginationCurrent,
+            total: totalCount,
+            pageSize: 20,
+            showTotal: (total) => t('total', { n: total }),
+            showSizeChanger: false,
+            onChange: async (page) => {
+              if (!client || !currentCollection) return;
+              if (page === paginationCurrent) return;
+              onSelectionChange([]);
+              setLoading(true);
+              try {
+                // 向前翻：逐页获取 cursor
+                let after: string | undefined;
+                for (let i = 1; i < page; i++) {
+                  const r = await fetchObjects(client, currentCollection, 20, after);
+                  after = r.after ?? undefined;
+                }
+                const r = await fetchObjects(client, currentCollection, 20, after);
+                setData(r.objects, r.total, { after: r.after, before: r.before });
+                setPaginationPage(page);
+              } catch (e: unknown) {
+                message.error(e instanceof Error ? e.message : t('paginationFail'));
+              } finally { setLoading(false); }
+            },
+          }}
           size="middle"
           scroll={{ x: 'max-content' }}
           locale={{ emptyText: <Empty description={t('noData')} style={{ padding: 40 }} /> }}
@@ -195,31 +292,6 @@ const DataTable: React.FC<{
           style={{ marginTop: 8 }}
         />
       </Spin>
-
-      {!isSearchMode && totalCount > 0 && (
-        <div style={{ textAlign: 'center', padding: '16px 0 0' }}>
-          <Pagination
-            current={paginationCurrent}
-            total={totalCount}
-            pageSize={20}
-            showSizeChanger={false}
-            showTotal={(n) => t('total', { n })}
-            onChange={async (page) => {
-              if (!client || !currentCollection) return;
-              setLoading(true);
-              try {
-                let after: string | undefined;
-                for (let i = 1; i < page; i++) { const r = await fetchObjects(client, currentCollection, 20, after); after = r.after ?? undefined; }
-                const r = await fetchObjects(client, currentCollection, 20, after);
-                setData(r.objects, r.total, { after: r.after, before: r.before });
-                setPaginationPage(page);
-              } catch (e: unknown) {
-                message.error(e instanceof Error ? e.message : t('paginationFail'));
-              } finally { setLoading(false); }
-            }}
-          />
-        </div>
-      )}
     </div>
   );
 };

@@ -68,7 +68,7 @@ export async function fetchObjects(
   // 提取 _additional.id 到 __id，方便编辑/删除
   const objects = rawObjects.map((obj) => {
     const add = obj._additional as Record<string, unknown> | undefined;
-    return { ...obj, __id: add?.id as string | undefined };
+    return { ...obj, _additional: obj._additional, __id: add?.id as string | undefined };
   });
 
   // 总数
@@ -160,7 +160,8 @@ export async function searchNearTextWithVector(
   const gqlGet = client.graphql
     .get()
     .withClassName(className)
-    .withNearText(nearTextArgs)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    .withNearText(nearTextArgs as any)
     .withLimit(limit)
     .withFields([...propNames, '_additional { id distance }'].join(' '));
 
@@ -209,6 +210,75 @@ export async function searchNearImage(
   });
 }
 
+/** 获取单个集合的对象数量和向量维度 */
+async function getCollectionStats(
+  client: WeaviateClient,
+  className: string,
+): Promise<{ count: number; vectorDim: number | null }> {
+  // 对象数量
+  let count = 0;
+  try {
+    const aggRes = await client.graphql
+      .aggregate()
+      .withClassName(className)
+      .withFields('meta { count }')
+      .do();
+    const aggData = (aggRes.data as Record<string, unknown>)?.Aggregate as Record<string, unknown> | undefined;
+    count = (aggData?.[className] as Array<{ meta: { count: number } }>)?.[0]?.meta?.count ?? 0;
+  } catch {
+    count = 0;
+  }
+
+  // 向量维度（取第一条数据）
+  let vectorDim: number | null = null;
+  if (count > 0) {
+    try {
+      const res = await client.graphql
+        .raw()
+        .withQuery(`{ Get { ${className}(limit: 1) { _additional { vector } } } }`)
+        .do();
+      const vec = (res.data as Record<string, unknown>)?.Get as Record<string, unknown> | undefined;
+      const arr = (vec?.[className] as Array<{ _additional?: { vector?: number[] } }>)?.[0]?._additional?.vector;
+      if (Array.isArray(arr)) vectorDim = arr.length;
+    } catch {
+      vectorDim = null;
+    }
+  }
+  return { count, vectorDim };
+}
+
+/** 仪表盘数据：总对象数、集合数、向量维度、预估存储、各集合详情 */
+export async function getDashboardData(
+  client: WeaviateClient,
+): Promise<{
+  totalObjects: number;
+  totalCollections: number;
+  vectorDimension: number | string;
+  estimatedStorage: string;
+  collectionDetails: { name: string; count: number; vectorDim: number | null }[];
+}> {
+  const collections = await listCollections(client);
+  const stats = await Promise.all(collections.map((name) => getCollectionStats(client, name).then((s) => ({ name, ...s }))));
+
+  const totalObjects = stats.reduce((s, c) => s + c.count, 0);
+  const totalCollections = collections.length;
+
+  // 向量维度：取所有非空维度，去重
+  const dims = [...new Set(stats.map((c) => c.vectorDim).filter((d): d is number => d !== null))];
+  let vectorDimension: number | string = '-';
+  if (dims.length === 1) vectorDimension = dims[0];
+  else if (dims.length > 1) vectorDimension = 'mixed';
+
+  // 预估存储 MB（按 float32 计算：对象数 × 维度 × 4 字节 / 1024 / 1024）
+  let estimatedStorage = '-';
+  if (typeof vectorDimension === 'number') {
+    const mb = (totalObjects * vectorDimension * 4) / 1024 / 1024;
+    estimatedStorage = mb.toFixed(1);
+  }
+
+  return { totalObjects, totalCollections, vectorDimension, estimatedStorage, collectionDetails: stats };
+}
+
 /** 插入对象 */
 export async function insertObject(
   client: WeaviateClient,
@@ -220,7 +290,7 @@ export async function insertObject(
 
 /** 更新对象 — vectorizer:none 的集合需要传原向量 */
 export async function updateObject(
-  client: WeaviateClient,
+  _client: WeaviateClient,
   className: string,
   id: string,
   data: Record<string, unknown>,
@@ -250,37 +320,85 @@ export async function deleteObject(
   await client.data.deleter().withClassName(className).withId(id).do();
 }
 
-/** 导出全部对象 */
-export async function fetchAllObjects(
+// ============ Schema 管理 ============
+
+/** Weaviate 支持的属性数据类型 */
+export const PROPERTY_DATA_TYPES = [
+  'text', 'int', 'number', 'boolean', 'date', 'blob', 'uuid',
+  'text[]', 'int[]', 'number[]', 'boolean[]', 'date[]', 'uuid[]',
+] as const;
+
+export type PropertyDataType = typeof PROPERTY_DATA_TYPES[number];
+
+/** 集合属性定义 */
+export interface CollectionProperty {
+  name: string;
+  dataType: PropertyDataType[];
+  description?: string;
+}
+
+/** 集合 Schema 详情 */
+export interface CollectionSchema {
+  name: string;
+  description?: string;
+  vectorizer?: string;
+  properties: CollectionProperty[];
+}
+
+/** 获取完整 Schema（含所有集合及属性详情） */
+export async function getFullSchema(client: WeaviateClient): Promise<CollectionSchema[]> {
+  const schema = await client.schema.getter().do();
+  const classes = ((schema as Record<string, unknown>).classes as Array<Record<string, unknown>>) ?? [];
+  return classes.map((cls) => ({
+    name: cls.class as string,
+    description: cls.description as string | undefined,
+    vectorizer: cls.vectorizer as string | undefined,
+    properties: ((cls.properties as Array<Record<string, unknown>>) ?? []).map((p) => ({
+      name: p.name as string,
+      dataType: p.dataType as PropertyDataType[],
+      description: p.description as string | undefined,
+    })),
+  }));
+}
+
+/** 创建新集合 */
+export async function createCollection(
+  client: WeaviateClient,
+  name: string,
+  properties: CollectionProperty[],
+  vectorizer?: string,
+): Promise<void> {
+  const classConfig: Record<string, unknown> = {
+    class: name,
+    properties: properties.map((p) => ({
+      name: p.name,
+      dataType: p.dataType,
+      ...(p.description ? { description: p.description } : {}),
+    })),
+  };
+  if (vectorizer && vectorizer !== 'none') {
+    classConfig.vectorizer = vectorizer;
+  } else {
+    classConfig.vectorizer = 'none';
+  }
+  await client.schema.classCreator().withClass(classConfig).do();
+}
+
+/** 删除集合 */
+export async function deleteCollection(client: WeaviateClient, name: string): Promise<void> {
+  await client.schema.classDeleter().withClassName(name).do();
+}
+
+/** 给已有集合添加属性 */
+export async function addProperty(
   client: WeaviateClient,
   className: string,
-): Promise<Record<string, unknown>[]> {
-  const props = await getClassProperties(client, className);
-  const propNames = props.map((p) => p.name);
-
-  const allObjects: Record<string, unknown>[] = [];
-  let after: string | undefined;
-
-  while (true) {
-    const gqlGet = client.graphql.get().withClassName(className).withLimit(100)
-      .withFields([...propNames, '_additional { id }'].join(' '));
-    if (after) gqlGet.withAfter(after);
-
-    const result = await gqlGet.do();
-    const rawData = (result.data as Record<string, unknown>)?.Get as Record<string, unknown> | undefined;
-    const batch = (rawData?.[className] ?? []) as Record<string, unknown>[];
-    if (batch.length === 0) break;
-
-    allObjects.push(...batch.map((obj) => {
-      const flat: Record<string, unknown> = { ...obj };
-      const add = flat._additional as Record<string, unknown> | undefined;
-      if (add) { flat.__id = add.id; delete flat._additional; }
-      return flat;
-    }));
-
-    after = (batch[batch.length - 1]?._additional as Record<string, unknown>)?.id as string | undefined;
-    if (batch.length < 100) break;
-  }
-
-  return allObjects;
+  property: CollectionProperty,
+): Promise<void> {
+  const propConfig: Record<string, unknown> = {
+    name: property.name,
+    dataType: property.dataType,
+  };
+  if (property.description) propConfig.description = property.description;
+  await client.schema.propertyCreator().withClassName(className).withProperty(propConfig).do();
 }

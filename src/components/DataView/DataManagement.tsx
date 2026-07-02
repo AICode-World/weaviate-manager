@@ -1,7 +1,7 @@
 import { useState, useEffect, forwardRef, useImperativeHandle } from 'react';
 import {
   Button, Modal, Form, Input, InputNumber, Upload, Popconfirm,
-  Space, Progress, message, Select, DatePicker, Alert,
+  Space, Progress, Select, DatePicker, Alert, App,
 } from 'antd';
 import {
   PlusOutlined, ExportOutlined, ImportOutlined, DeleteOutlined,
@@ -12,7 +12,7 @@ import dayjs from 'dayjs';
 import useAppStore from '../../stores/appStore';
 import {
   insertObject, updateObject, deleteObject,
-  fetchAllObjects, getClassProperties,
+  getClassProperties,
 } from '../../services/weaviate';
 import { useI18n } from '../../i18n/I18nProvider';
 
@@ -38,6 +38,7 @@ export interface DataManagementHandle {
   openCreate: () => void;
   openEdit: (record: Record<string, unknown>) => void;
   handleDelete: (id: string) => void;
+  handleExportSelected: () => void;
 }
 
 /** 检测 base64 图片类型并补全 data URI 前缀 */
@@ -77,6 +78,7 @@ const DataManagement = forwardRef<DataManagementHandle, {
 }>(({ selectedRowKeys, onSelectionChange, onRefresh }, ref) => {
   const { client, currentCollection, url: storeUrl } = useAppStore();
   const { t } = useI18n();
+  const { message } = App.useApp();
 
   const [modalOpen, setModalOpen] = useState(false);
   const [editingRecord, setEditingRecord] = useState<Record<string, unknown> | null>(null);
@@ -86,6 +88,7 @@ const DataManagement = forwardRef<DataManagementHandle, {
   const [importFile, setImportFile] = useState<File | null>(null);
   const [importProgress, setImportProgress] = useState(0);
   const [importResult, setImportResult] = useState<{ success: number; fail: number } | null>(null);
+  const [submitting, setSubmitting] = useState(false);
   // 编辑时记录原始 blob 值，用于检测图片是否被更换
   const [originalBlobs, setOriginalBlobs] = useState<Record<string, string | null>>({});
   // 图片预览
@@ -178,11 +181,12 @@ const DataManagement = forwardRef<DataManagementHandle, {
   };
 
   // 暴露方法给父组件
-  useImperativeHandle(ref, () => ({ openCreate, openEdit, handleDelete }), [fields, client, currentCollection]);
+  useImperativeHandle(ref, () => ({ openCreate, openEdit, handleDelete, handleExportSelected }), [fields, client, currentCollection, selectedRowKeys]);
 
   /** 提交表单（新增或编辑） */
   const handleSubmit = async () => {
     if (!client || !currentCollection) return;
+    setSubmitting(true);
     try {
       const values = await form.validateFields();
       // 处理 blob 字段：统一转为裸 base64 存 Weaviate
@@ -255,6 +259,8 @@ const DataManagement = forwardRef<DataManagementHandle, {
     } catch (e: unknown) {
       if (e && typeof e === 'object' && 'errorFields' in e) return; // form validation
       message.error(e instanceof Error ? e.message : t('operationFail'));
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -270,58 +276,70 @@ const DataManagement = forwardRef<DataManagementHandle, {
   /** 批量删除 */
   const handleBatchDelete = async () => {
     if (!client || !currentCollection) return;
+    const total = selectedRowKeys.length;
     let success = 0;
     let fail = 0;
-    for (const id of selectedRowKeys) {
+    const hide = message.loading({ content: t('batchProgress', { current: 0, total }), key: 'batchDelete', duration: 0 });
+    for (let i = 0; i < selectedRowKeys.length; i++) {
       try {
-        await deleteObject(client, currentCollection, id);
+        await deleteObject(client, currentCollection, selectedRowKeys[i]);
         success++;
-      } catch {
-        fail++;
-      }
+      } catch { fail++; }
+      hide();
+      message.loading({ content: t('batchProgress', { current: i + 1, total }), key: 'batchDelete', duration: 0 });
     }
+    hide();
     message.info(t('deleteDone', { s: success, f: fail }));
     onSelectionChange([]);
     onRefresh();
   };
 
-  /** 导出 CSV */
+  /** 导出 CSV：有选中则导出选中，无选中则提示 */
   const handleExport = async () => {
     if (!client || !currentCollection) return;
-    message.loading({ content: t('exporting'), key: 'export' });
-    try {
-      const all = await fetchAllObjects(client, currentCollection);
-      if (all.length === 0) {
-        message.warning({ content: t('noDataExport'), key: 'export' });
-        return;
-      }
-      const allKeys = new Set<string>();
-      all.forEach((row) => Object.keys(row).forEach((k) => { if (!k.startsWith('__')) allKeys.add(k); }));
-      const headers = [...allKeys];
 
-      const csvRows = [headers.join(',')];
-      for (const row of all) {
-        const vals = headers.map((h) => {
-          const v = row[h];
-          if (v === null || v === undefined) return '';
-          if (typeof v === 'string' && v.startsWith('data:')) return '存在';
-          const s = String(v);
-          return s.includes(',') || s.includes('"') ? `"${s.replace(/"/g, '""')}"` : s;
-        });
-        csvRows.push(vals.join(','));
-      }
-
-      const blob = new Blob(['\uFEFF' + csvRows.join('\n')], { type: 'text/csv;charset=utf-8' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `${currentCollection}_${new Date().toISOString().slice(0, 10)}.csv`;
-      a.click();
-      URL.revokeObjectURL(url);
-      message.success({ content: t('exportDone', { n: all.length }), key: 'export' });
-    } catch (e: unknown) {
-      message.error({ content: e instanceof Error ? e.message : t('exportFail'), key: 'export' });
+    if (selectedRowKeys.length > 0) {
+      handleExportSelected();
+      return;
     }
+
+    message.warning({ content: t('selectDataToExport'), key: 'export' });
+  };
+
+
+  /** 导出选中行为 CSV */
+  const handleExportSelected = () => {
+    if (!currentCollection || selectedRowKeys.length === 0) return;
+    const { currentData, searchResults, searchQuery } = useAppStore.getState();
+    const isSearchMode = searchResults.length > 0 || !!searchQuery.trim();
+    const displayData = isSearchMode ? searchResults : currentData;
+    const selectedRows = displayData.filter((row) => selectedRowKeys.includes(row.__id as string));
+    if (selectedRows.length === 0) {
+      message.warning(t('noDataExport'));
+      return;
+    }
+    const allKeys = new Set<string>();
+    selectedRows.forEach((row) => Object.keys(row).forEach((k) => { if (!k.startsWith('__') && k !== '_additional') allKeys.add(k); }));
+    const headers = [...allKeys];
+    const csvRows = [headers.join(',')];
+    for (const row of selectedRows) {
+      const vals = headers.map((h) => {
+        const v = row[h];
+        if (v === null || v === undefined) return '';
+        if (typeof v === 'string' && v.startsWith('data:')) return '存在';
+        const s = String(v);
+        return s.includes(',') || s.includes('"') ? `"${s.replace(/"/g, '""')}"` : s;
+      });
+      csvRows.push(vals.join(','));
+    }
+    const blob = new Blob(['﻿' + csvRows.join('\n')], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${currentCollection}_selected_${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+    message.success(t('exportDone', { n: selectedRows.length }));
   };
 
   /** 导入 CSV */
@@ -369,23 +387,6 @@ const DataManagement = forwardRef<DataManagementHandle, {
     setImportResult({ success, fail });
     message.success(t('csvImportDone', { s: success, f: fail }));
     onRefresh();
-  };
-
-  /** 获取当前 blob 字段值中的 media URL */
-  const getBlobUrl = (fieldName: string): string | null => {
-    const v = form.getFieldValue(fieldName);
-    if (!v) return null;
-    // Upload 组件格式: [{url: 'data:...'}]
-    if (Array.isArray(v) && v[0]?.url) return v[0].url as string;
-    // 或者字符串格式
-    if (typeof v === 'string' && v.startsWith('data:')) return v;
-    return null;
-  };
-
-  /** 检测 media MIME 类型 */
-  const getMediaKind = (url: string): 'image' | 'video' | 'audio' | null => {
-    const m = url.match(/^data:(image|video|audio)\//);
-    return m ? m[1] as 'image' | 'video' | 'audio' : null;
   };
 
   /** 渲染表单字段 */
@@ -460,6 +461,7 @@ const DataManagement = forwardRef<DataManagementHandle, {
         open={modalOpen}
         onOk={handleSubmit}
         onCancel={() => setModalOpen(false)}
+        confirmLoading={submitting}
         width={600}
       >
         <Form form={form} layout="vertical">
@@ -506,8 +508,8 @@ const DataManagement = forwardRef<DataManagementHandle, {
           <Progress percent={importProgress} style={{ marginTop: 16 }} />
         )}
         {importResult && (
-          <div style={{ marginTop: 8 }}>
-            成功: {importResult.success} / 失败: {importResult.fail}
+          <div style={{ marginTop: 8, color: 'var(--color-text-tertiary)' }}>
+            {t('csvImportDone', { s: importResult.success, f: importResult.fail })}
           </div>
         )}
       </Modal>

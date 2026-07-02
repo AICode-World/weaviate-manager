@@ -6,14 +6,85 @@
   padding: 0;
 }
 
+/* ============ 亮色主题（默认） ============ */
+:root {
+  --color-bg-base: #ffffff;
+  --color-bg-layout: #f7f8fa;
+  --color-bg-sidebar: #f1f3f9;
+  --color-text-primary: #1a1f36;
+  --color-text-secondary: #4a5266;
+  --color-text-tertiary: #6b7589;
+  --color-text-quaternary: #9aa3b5;
+  --color-border: #e5e8f0;
+  --color-border-secondary: #eef0f5;
+  --scrollbar-thumb: #d0d5e0;
+  --scrollbar-thumb-hover: #b5bcc9;
+  --shadow-card: 0 1px 3px rgba(26, 31, 54, 0.04), 0 4px 12px rgba(26, 31, 54, 0.04);
+}
+
+/* ============ 暗色主题 ============ */
+[data-theme="dark"] {
+  --color-bg-base: #1a1d2e;
+  --color-bg-layout: #0f1117;
+  --color-bg-sidebar: #151825;
+  --color-text-primary: #e4e6ed;
+  --color-text-secondary: #b0b8c9;
+  --color-text-tertiary: #7a839a;
+  --color-text-quaternary: #5a6377;
+  --color-border: #2a2e3e;
+  --color-border-secondary: #232636;
+  --scrollbar-thumb: #3a3e50;
+  --scrollbar-thumb-hover: #4a4e60;
+  --shadow-card: 0 1px 3px rgba(0, 0, 0, 0.3), 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
 html, body, #root {
   height: 100%;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'PingFang SC', 'Microsoft YaHei', sans-serif;
   font-size: 14px;
-  color: #1a1f36;
-  background: #f7f8fa;
+  color: var(--color-text-primary);
+  background: var(--color-bg-layout);
   -webkit-font-smoothing: antialiased;
   font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
+  transition:
+    background-color 0.35s ease,
+    color 0.35s ease,
+    border-color 0.35s ease,
+    box-shadow 0.35s ease;
+}
+
+/* 全局元素主题过渡（覆盖 antd 和自定义组件） */
+body *,
+body *::before,
+body *::after {
+  transition:
+    background-color 0.35s ease,
+    border-color 0.35s ease,
+    box-shadow 0.35s ease;
+}
+
+/* antd portal 容器（Popover/Modal/Dropdown 等渲染在 body 顶层） */
+.ant-popover,
+.ant-modal-root,
+.ant-modal-wrap,
+.ant-modal-mask,
+.ant-dropdown,
+.ant-tooltip,
+.ant-select-dropdown {
+  transition:
+    background-color 0.35s ease,
+    border-color 0.35s ease,
+    color 0.35s ease,
+    box-shadow 0.35s ease;
+}
+
+.ant-popover .ant-popover-inner,
+.ant-modal .ant-modal-content,
+.ant-dropdown .ant-dropdown-menu {
+  transition:
+    background-color 0.35s ease,
+    border-color 0.35s ease,
+    box-shadow 0.35s ease;
 }
 
 ::-webkit-scrollbar {
@@ -24,9 +95,24 @@ html, body, #root {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: #d0d5e0;
+  background: var(--scrollbar-thumb);
   border-radius: 3px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #b5bcc9;
+  background: var(--scrollbar-thumb-hover);
+}
+
+/* ============ 页面切换动画 ============ */
+@keyframes pageEnter {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.99);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+.page-fade-in {
+  animation: pageEnter 0.3s cubic-bezier(0.16, 1, 0.3, 1);
 }

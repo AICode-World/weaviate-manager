@@ -9,7 +9,7 @@ interface I18nContextType {
 }
 
 const I18nContext = createContext<I18nContextType>({
-  lang: 'zh',
+  lang: 'en',
   setLang: () => {},
   t: (key) => key,
 });
@@ -17,7 +17,7 @@ const I18nContext = createContext<I18nContextType>({
 export const useI18n = () => useContext(I18nContext);
 
 export const I18nProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [lang, setLang] = useState<Lang>('zh');
+  const [lang, setLang] = useState<Lang>('en');
   const value = useMemo(() => ({
     lang,
     setLang,
