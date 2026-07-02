@@ -237,7 +237,7 @@ const useAppStore = create<AppStore>((set, get) => ({
   },
 
   saveCluster: (cluster) => {
-    const id = String(Date.now());
+    const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     const newOne: ClusterConfig = { ...cluster, id };
     const clusters = [...get().clusters, newOne];
     // 第一个或明确 default 则设为 isDefault
