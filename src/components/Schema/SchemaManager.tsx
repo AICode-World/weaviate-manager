@@ -151,6 +151,8 @@ const SchemaManager: React.FC = () => {
           </Space>
         </div>
 
+        <Alert type="info" showIcon message={t('removePropertyNote')} style={{ marginTop: 8, marginBottom: 8 }} />
+
         {schemas.length === 0 ? (
           <EmptyState
             icon={<AppstoreOutlined />}
@@ -208,8 +210,6 @@ const SchemaManager: React.FC = () => {
             }))}
           />
         )}
-
-        <Alert type="info" showIcon message={t('removePropertyNote')} style={{ marginTop: 4 }} />
       </div>
 
       {/* 创建集合 Modal */}

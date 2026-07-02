@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from 'react';
-import { Layout, Button, Typography, Popover, Tooltip, Badge, App } from 'antd';
+import { useEffect, useRef, useState, lazy, Suspense } from 'react';
+import { Layout, Button, Typography, Popover, Tooltip, Badge, App, Spin } from 'antd';
 import {
   DashboardOutlined, DatabaseOutlined, AppstoreOutlined,
   SunOutlined, MoonOutlined, DesktopOutlined, QuestionCircleOutlined,
@@ -8,14 +8,16 @@ import {
 import { Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import ConnectionManager from '../Connection/ConnectionManager';
 import CollectionList from '../Collections/CollectionList';
-import SchemaManager from '../Schema/SchemaManager';
 import ClusterManagerModal from '../Connection/ClusterManagerModal';
-import Dashboard from '../../pages/Dashboard';
-import DataPage from '../../pages/DataPage';
 import AppTour, { resetTour } from '../Onboarding/AppTour';
 import useAppStore, { THEME_PRESETS } from '../../stores/appStore';
 import { useI18n } from '../../i18n/I18nProvider';
 import { createClient, testConnection, listCollections } from '../../services/weaviate';
+
+// 路由懒加载：每个页面只在访问时下载
+const Dashboard = lazy(() => import('../../pages/Dashboard'));
+const DataPage = lazy(() => import('../../pages/DataPage'));
+const SchemaManager = lazy(() => import('../Schema/SchemaManager'));
 
 const { Sider, Content } = Layout;
 const { Text } = Typography;
@@ -307,12 +309,14 @@ const MainLayout: React.FC = () => {
         </div>
         <Content style={{ padding: 20, background: 'var(--color-bg-layout)', overflow: 'auto' }}>
           <div key={location.pathname} className="page-fade-in">
-            <Routes>
-              <Route path="/" element={<div style={{ height: '100%' }}><Dashboard /></div>} />
-              <Route path="/data" element={<DataPage />} />
-              <Route path="/schema" element={<SchemaManager />} />
-              <Route path="*" element={<Navigate to="/" replace />} />
-            </Routes>
+            <Suspense fallback={<div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '50vh' }}><Spin size="large" /></div>}>
+              <Routes>
+                <Route path="/" element={<div style={{ height: '100%' }}><Dashboard /></div>} />
+                <Route path="/data" element={<DataPage />} />
+                <Route path="/schema" element={<SchemaManager />} />
+                <Route path="*" element={<Navigate to="/" replace />} />
+              </Routes>
+            </Suspense>
           </div>
         </Content>
       </Layout>

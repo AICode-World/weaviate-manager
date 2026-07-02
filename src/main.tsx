@@ -3,8 +3,7 @@ import { createRoot } from 'react-dom/client';
 import 'antd/dist/reset.css';
 import './index.css';
 
-// Monaco Editor 本地化：避免默认从 jsDelivr CDN 加载（国内慢）
-import * as monaco from 'monaco-editor';
+// Monaco workers 静态导入 — 确保生产模式下路径正确
 import EditorWorker from 'monaco-editor/esm/vs/editor/editor.worker?worker';
 import JSONWorker from 'monaco-editor/esm/vs/language/json/json.worker?worker';
 import CSSWorker from 'monaco-editor/esm/vs/language/css/css.worker?worker';
@@ -20,9 +19,6 @@ self.MonacoEnvironment = {
     return new EditorWorker();
   },
 };
-
-import { loader } from '@monaco-editor/react';
-loader.config({ monaco });
 
 import App from './App';
 

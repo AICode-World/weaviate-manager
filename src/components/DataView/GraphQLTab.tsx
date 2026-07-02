@@ -1,12 +1,19 @@
-import { useState, useRef, useCallback, useEffect } from 'react';
+import { useState, useRef, useCallback, useEffect, Suspense, lazy } from 'react';
 import { Space, Button, Spin, Select, Drawer } from 'antd';
 import { PlayCircleOutlined, ClearOutlined, HistoryOutlined } from '@ant-design/icons';
-import Editor from '@monaco-editor/react';
 import useAppStore from '../../stores/appStore';
 import { useQueryHistoryStore } from '../../stores/queryHistoryStore';
 import QueryHistoryPanel from './QueryHistoryPanel';
 import { getClassProperties, listCollections } from '../../services/weaviate';
 import { useI18n } from '../../i18n/I18nProvider';
+import { initMonaco } from '../../monacoSetup';
+
+// 懒加载 Monaco Editor（仅在 GraphQL tab 打开时下载）
+const Editor = lazy(async () => {
+  await initMonaco();
+  const mod = await import('@monaco-editor/react');
+  return { default: mod.default };
+});
 
 const GraphQLTab: React.FC = () => {
   const { t } = useI18n();
@@ -90,8 +97,10 @@ const GraphQLTab: React.FC = () => {
       </Space>
       <div ref={containerRef} style={{ flex: 1, display: 'flex', minHeight: 0, userSelect: 'none' }}>
         <div style={{ width: `${leftWidth}%`, border: '1px solid var(--color-border)', borderRadius: 8, overflow: 'hidden' }}>
-          <Editor height="100%" language="graphql" theme="vs-dark" value={query} onChange={(val) => setQuery(val || '')}
-            options={{ minimap: { enabled: false }, fontSize: 14, lineNumbers: 'on', wordWrap: 'on', scrollBeyondLastLine: false, padding: { top: 8 } }} />
+          <Suspense fallback={<div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: 'var(--color-text-quaternary)' }}><Spin description={t('loading')} /></div>}>
+            <Editor height="100%" language="graphql" theme="vs-dark" value={query} onChange={(val) => setQuery(val || '')}
+              options={{ minimap: { enabled: false }, fontSize: 14, lineNumbers: 'on', wordWrap: 'on', scrollBeyondLastLine: false, padding: { top: 8 } }} />
+          </Suspense>
         </div>
         <div onMouseDown={onMouseDown} style={{ width: 6, cursor: 'col-resize', background: 'transparent', flexShrink: 0, position: 'relative', zIndex: 10 }}>
           <div style={{ position: 'absolute', left: 2, top: 0, bottom: 0, width: 2, background: dragging.current ? 'var(--color-primary, #1677ff)' : 'var(--color-border)', transition: dragging.current ? 'none' : 'background 0.2s' }} />
@@ -113,10 +122,9 @@ const GraphQLTab: React.FC = () => {
       <Drawer
         title={t('queryHistory')}
         placement="right"
-        width={380}
         open={historyOpen}
         onClose={() => setHistoryOpen(false)}
-        styles={{ body: { padding: 0 } }}
+        styles={{ body: { padding: 0 }, wrapper: { width: 380 } }}
       >
         <QueryHistoryPanel
           onLoadQuery={(record) => {

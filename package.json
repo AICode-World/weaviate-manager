@@ -1,7 +1,7 @@
 {
   "name": "weaviate-manager",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.1.1",
   "type": "module",
   "description": "A modern visual management console for Weaviate vector databases — browse collections, query data, run GraphQL, and perform multimodal search.",
   "author": "",
@@ -35,6 +35,7 @@
     "@vitejs/plugin-react": "^6.0.2",
     "oxlint": "^1.69.0",
     "typescript": "~6.0.2",
-    "vite": "^8.1.0"
+    "vite": "^8.1.0",
+    "vite-plugin-pwa": "^1.3.0"
   }
 }
