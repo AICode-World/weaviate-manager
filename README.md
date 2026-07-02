@@ -85,7 +85,7 @@ Or use [Weaviate Cloud](https://console.weaviate.cloud/) — just paste the endp
 
 ```bash
 # Clone
-git clone https://github.com/<your-username>/weaviate-manager.git
+git clone https://github.com/AICode-World/weaviate-manager.git
 cd weaviate-manager
 
 # Install
@@ -213,7 +213,7 @@ Weaviate Manager 是一个现代化的 Weaviate 向量数据库可视化管理�
 ### 快速启动
 
 ```bash
-git clone https://github.com/<your-username>/weaviate-manager.git
+git clone https://github.com/AICode-World/weaviate-manager.git
 cd weaviate-manager
 npm install
 npm run dev
