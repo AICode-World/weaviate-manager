@@ -196,6 +196,20 @@ export const messages: Record<Lang, Record<string, string>> = {
     switchToZh: 'Switch to Chinese',
     langLabelZh: '中文',
     langLabelEn: 'EN',
+    // Phase 11: 卡片视图
+    embedded: '已嵌入',
+    notEmbedded: '未嵌入',
+    filterByType: '按类型筛选',
+    unnamedFile: '未命名文件',
+    pageNum: '第 {n} 页',
+    recordDetail: '记录详情',
+    recordId: '记录 ID',
+    vectorInfo: '向量信息',
+    vectorId: '向量 ID',
+    noVector: '无向量',
+    allTypes: '全部类型',
+    settings: '设置',
+    globalSearch: '全局搜索',
   },
 
   en: {
@@ -393,6 +407,20 @@ export const messages: Record<Lang, Record<string, string>> = {
     switchToZh: '切换到中文',
     langLabelZh: 'Chinese',
     langLabelEn: 'EN',
+    // Phase 11: Card View
+    embedded: 'Embedded',
+    notEmbedded: 'Not Embedded',
+    filterByType: 'Filter by type',
+    unnamedFile: 'Unnamed file',
+    pageNum: 'P{n}',
+    recordDetail: 'Record Details',
+    recordId: 'Record ID',
+    vectorInfo: 'Vector Info',
+    vectorId: 'Vector ID',
+    noVector: 'No vector',
+    allTypes: 'All types',
+    settings: 'Settings',
+    globalSearch: 'Global search',
   },
 };
 

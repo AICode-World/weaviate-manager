@@ -7,12 +7,12 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['favicon.svg', 'icons.svg'],
+      includeAssets: ['favicon.svg', 'logo.svg', 'icons.svg'],
       manifest: {
         name: 'Weaviate Manager',
         short_name: 'Weaviate',
         description: 'Visual management console for Weaviate vector databases',
-        theme_color: '#1677ff',
+        theme_color: '#6C5CE7',
         background_color: '#ffffff',
         display: 'standalone',
         scope: '/',
