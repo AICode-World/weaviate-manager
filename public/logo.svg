@@ -1,0 +1,80 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200">
+  <defs>
+    <!-- 主渐变：蓝到紫 -->
+    <linearGradient id="mainGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#4A90E2;stop-opacity:0.93" />
+      <stop offset="50%" style="stop-color:#6C5CE7;stop-opacity:0.93" />
+      <stop offset="100%" style="stop-color:#9013FE;stop-opacity:0.93" />
+    </linearGradient>
+
+    <!-- 玻璃拟态高光 -->
+    <linearGradient id="glassTop" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#ffffff;stop-opacity:0.6" />
+      <stop offset="50%" style="stop-color:#ffffff;stop-opacity:0.12" />
+      <stop offset="100%" style="stop-color:#ffffff;stop-opacity:0" />
+    </linearGradient>
+
+    <!-- 边缘高光 -->
+    <linearGradient id="edgeShine" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#ffffff;stop-opacity:0.35" />
+      <stop offset="50%" style="stop-color:#ffffff;stop-opacity:0.08" />
+      <stop offset="100%" style="stop-color:#ffffff;stop-opacity:0.25" />
+    </linearGradient>
+
+    <!-- 柔和投影 -->
+    <filter id="shadow" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="4"/>
+      <feOffset dx="0" dy="3" result="shadow"/>
+      <feComponentTransfer>
+        <feFuncA type="linear" slope="0.18"/>
+      </feComponentTransfer>
+      <feMerge>
+        <feMergeNode/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+
+    <!-- 重叠区域折射光 -->
+    <filter id="refraction">
+      <feGaussianBlur stdDeviation="1.5"/>
+    </filter>
+  </defs>
+
+  <!-- ===== 左侧菱形（形成 M 的左半峰） ===== -->
+  <g filter="url(#shadow)">
+    <!-- 主体 -->
+    <path d="M 68 42 L 42 82 L 78 130 L 112 82 Z"
+          fill="url(#mainGradient)" />
+    <!-- 玻璃高光（上半面） -->
+    <path d="M 68 42 L 42 82 L 78 90 L 112 82 Z"
+          fill="url(#glassTop)" />
+    <!-- 描边光晕 -->
+    <path d="M 68 42 L 42 82 L 78 130 L 112 82 Z"
+          fill="none" stroke="url(#edgeShine)" stroke-width="1.2"
+          stroke-linejoin="round" />
+  </g>
+
+  <!-- ===== 右侧菱形（形成 M 的右半峰） ===== -->
+  <g filter="url(#shadow)">
+    <!-- 主体 -->
+    <path d="M 132 42 L 88 82 L 122 130 L 158 82 Z"
+          fill="url(#mainGradient)" />
+    <!-- 玻璃高光（上半面） -->
+    <path d="M 132 42 L 88 82 L 122 90 L 158 82 Z"
+          fill="url(#glassTop)" />
+    <!-- 描边光晕 -->
+    <path d="M 132 42 L 88 82 L 122 130 L 158 82 Z"
+          fill="none" stroke="url(#edgeShine)" stroke-width="1.2"
+          stroke-linejoin="round" />
+  </g>
+
+  <!-- ===== 重叠区域：玻璃折射效果 ===== -->
+  <path d="M 88 82 L 100 62 L 112 82 L 100 106 Z"
+        fill="#ffffff" opacity="0.1" filter="url(#refraction)" />
+
+  <!-- ===== M 形顶部轮廓高光 ===== -->
+  <path d="M 42 82 L 68 42 L 100 62 L 132 42 L 158 82"
+        fill="none" stroke="#ffffff" stroke-width="1"
+        stroke-linecap="round" stroke-linejoin="round"
+        opacity="0.2" />
+</svg>

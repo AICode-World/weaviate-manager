@@ -22,32 +22,35 @@ const DataPage: React.FC = () => {
   if (!currentCollection) {
     return (
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
-        <div style={{ textAlign: 'center', color: 'var(--color-text-tertiary)' }}>
-          <DatabaseOutlined style={{ fontSize: 48, marginBottom: 16, color: 'var(--color-text-quaternary)' }} />
-          <div style={{ fontSize: 16, fontWeight: 500 }}>{t('selectCollection')}</div>
+        <div style={{ textAlign: 'center', color: 'var(--color-text-quaternary)' }}>
+          <DatabaseOutlined style={{ fontSize: 48, marginBottom: 16, opacity: 0.5 }} />
+          <div style={{ fontSize: 15, fontWeight: 500, color: 'var(--color-text-tertiary)' }}>{t('selectCollection')}</div>
         </div>
       </div>
     );
   }
 
   return (
-    <Tabs defaultActiveKey="browse" size="small" items={[
-      {
-        key: 'browse',
-        label: <span><UnorderedListOutlined /> {t('dataBrowse')}</span>,
-        children: (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-              <div style={{ flex: 1, minWidth: 240 }}><SearchBar /></div>
-              <DataManagement ref={dmRef} selectedRowKeys={selectedRowKeys} onSelectionChange={setSelectedRowKeys} onRefresh={handleRefresh} />
-            </div>
-            <DataTable onEdit={handleEdit} onDelete={handleDelete} refreshKey={refreshKey} selectedRowKeys={selectedRowKeys} onSelectionChange={setSelectedRowKeys} />
-          </div>
-        ),
-      },
-      { key: 'graphql', label: <span><CodeOutlined /> {t('graphqlTab')}</span>, children: <GraphQLTab /> },
-      { key: 'multimodal', label: <span><PictureOutlined /> {t('multimodalSearch')}</span>, children: <MultiModalSearch /> },
-    ]} style={{ background: 'var(--color-bg-base)', padding: '12px 16px 0', borderRadius: 10, boxShadow: 'var(--shadow-card)' }} />
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      {/* 搜索和操作栏 */}
+      <div className="glass-card" style={{ padding: '12px 16px', display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+        <div style={{ flex: 1, minWidth: 200 }}>
+          <SearchBar />
+        </div>
+        <DataManagement ref={dmRef} selectedRowKeys={selectedRowKeys} onSelectionChange={setSelectedRowKeys} onRefresh={handleRefresh} />
+      </div>
+
+      {/* 标签页 */}
+      <Tabs defaultActiveKey="browse" size="small" items={[
+        {
+          key: 'browse',
+          label: <span><UnorderedListOutlined /> {t('dataBrowse')}</span>,
+          children: <DataTable onEdit={handleEdit} onDelete={handleDelete} refreshKey={refreshKey} selectedRowKeys={selectedRowKeys} onSelectionChange={setSelectedRowKeys} />,
+        },
+        { key: 'graphql', label: <span><CodeOutlined /> {t('graphqlTab')}</span>, children: <GraphQLTab /> },
+        { key: 'multimodal', label: <span><PictureOutlined /> {t('multimodalSearch')}</span>, children: <MultiModalSearch /> },
+      ]} style={{ background: 'transparent' }} />
+    </div>
   );
 };
 
