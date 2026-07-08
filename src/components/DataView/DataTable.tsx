@@ -241,12 +241,8 @@ const DataTable: React.FC<{
     onSelectionChange([]);
     setLoading(true);
     try {
-      let after: string | undefined;
-      for (let i = 1; i < page; i++) {
-        const r = await fetchObjects(client, currentCollection, 20, after);
-        after = r.after ?? undefined;
-      }
-      const r = await fetchObjects(client, currentCollection, 20, after);
+      const pageSize = 20;
+      const r = await fetchObjects(client, currentCollection, pageSize, undefined, (page - 1) * pageSize);
       setData(r.objects, r.total, { after: r.after, before: r.before });
       setPaginationPage(page);
     } catch (e: unknown) {
@@ -333,7 +329,7 @@ const DataTable: React.FC<{
               const section = getFieldValue(row, 'section');
               const embedModel = getFieldValue(row, 'embed_model');
               const sourceType = getFieldValue(row, 'source_type');
-              const isEmbedded = embedModel === 'text-embedding-ada-002';
+              const isEmbedded = !!embedModel && String(embedModel).trim() !== '';
               const typeColor = getSourceTypeColor(sourceType);
 
               return (
@@ -531,6 +527,10 @@ const DataTable: React.FC<{
       >
         {drawerRecord && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            {(() => {
+              const drawerEmbedModel = getFieldValue(drawerRecord, 'embed_model');
+              const drawerIsEmbedded = !!drawerEmbedModel && String(drawerEmbedModel).trim() !== '';
+              return (
             <div style={{
               display: 'flex', gap: 8, flexWrap: 'wrap',
               padding: '0 0 12px', borderBottom: '1px solid var(--color-border-secondary)',
@@ -545,8 +545,8 @@ const DataTable: React.FC<{
                   {getFieldValue(drawerRecord, 'source_type')}
                 </span>
               )}
-              <span className={`status-dot ${getFieldValue(drawerRecord, 'embed_model') === 'text-embedding-ada-002' ? 'success' : 'default'}`}>
-                {getFieldValue(drawerRecord, 'embed_model') === 'text-embedding-ada-002' ? t('embedded') : t('notEmbedded')}
+              <span className={`status-dot ${drawerIsEmbedded ? 'success' : 'default'}`}>
+                {drawerIsEmbedded ? t('embedded') : t('notEmbedded')}
               </span>
               {getFieldValue(drawerRecord, 'page_num') && (
                 <span style={{ fontSize: 12, color: 'var(--color-text-tertiary)', background: 'var(--color-border-secondary)', borderRadius: 4, padding: '2px 8px' }}>
@@ -554,6 +554,7 @@ const DataTable: React.FC<{
                 </span>
               )}
             </div>
+            )})}
 
             <Descriptions column={1} bordered size="small" labelStyle={{ fontWeight: 500, width: 140 }}>
               {drawerRecord.__id && (

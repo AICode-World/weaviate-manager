@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState, lazy, Suspense } from 'react';
-import { Layout, Button, Popover, Tooltip, Badge, App, Spin, Input, Avatar } from 'antd';
+import { Layout, Button, Popover, Tooltip, Badge, App, Spin, Avatar } from 'antd';
 import {
   DashboardOutlined, DatabaseOutlined, AppstoreOutlined,
   SunOutlined, MoonOutlined, DesktopOutlined, QuestionCircleOutlined,
   MenuFoldOutlined, MenuUnfoldOutlined, CloudServerOutlined,
-  SearchOutlined, UserOutlined,
+  UserOutlined,
   CaretRightOutlined,
 } from '@ant-design/icons';
 import { Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
@@ -353,15 +353,8 @@ const MainLayout: React.FC = () => {
         )}
       </div>
 
-      {/* 右侧：搜索 + 语言 + 主题 + 主题色 + 引导 + 头像 */}
+      {/* 右侧：语言 + 主题 + 主题色 + 引导 + 头像 */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-        <Input
-          prefix={<SearchOutlined style={{ color: 'var(--color-text-quaternary)' }} />}
-          placeholder={t('searchPlaceholder')}
-          size="small"
-          style={{ width: 200, borderRadius: 10 }}
-          allowClear
-        />
         <Tooltip title={t(lang === 'zh' ? 'switchToEn' : 'switchToZh')}>
           <Button type="text" size="small" style={{ color: 'var(--color-text-tertiary)', fontSize: 11, fontWeight: 600 }} onClick={() => setLang(lang === 'zh' ? 'en' : 'zh')}>
             {t(lang === 'zh' ? 'langLabelZh' : 'langLabelEn')}

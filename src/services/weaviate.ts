@@ -41,12 +41,13 @@ export async function getClassProperties(
   return ((schema as Record<string, unknown>).properties ?? []) as Array<{ name: string; dataType: string[] }>;
 }
 
-/** 游标分页获取对象 */
+/** 获取对象（支持游标分页或 offset 分页） */
 export async function fetchObjects(
   client: WeaviateClient,
   className: string,
   limit: number = 20,
   after?: string,
+  offset?: number,
 ): Promise<{
   objects: Record<string, unknown>[];
   total: number;
@@ -58,11 +59,18 @@ export async function fetchObjects(
   const allFields = [...propNames, '_additional { id vector }'];
   const fieldsStr = allFields.join(' ');
 
-  // 构建查询
-  const gqlGet = client.graphql.get().withClassName(className).withLimit(limit).withFields(fieldsStr);
-  if (after) gqlGet.withAfter(after);
+  // 使用 offset 分页时走 raw GraphQL（ts-client 有限制）
+  let result: Record<string, unknown>;
+  if (offset !== undefined) {
+    const offsetArg = offset > 0 ? `, offset: ${offset}` : '';
+    const query = `{ Get { ${className}(limit: ${limit}${offsetArg}) { ${fieldsStr} } } }`;
+    result = await client.graphql.raw().withQuery(query).do();
+  } else {
+    const gqlGet = client.graphql.get().withClassName(className).withLimit(limit).withFields(fieldsStr);
+    if (after) gqlGet.withAfter(after);
+    result = await gqlGet.do();
+  }
 
-  const result = await gqlGet.do();
   const rawData = (result.data as Record<string, unknown>)?.Get as Record<string, unknown> | undefined;
   const rawObjects = (rawData?.[className] ?? []) as Record<string, unknown>[];
   // 提取 _additional.id 到 __id，方便编辑/删除
@@ -295,8 +303,9 @@ export async function updateObject(
   id: string,
   data: Record<string, unknown>,
   vector?: number[],
-  baseUrl: string = 'http://localhost:8080',
+  baseUrl: string,
 ): Promise<void> {
+  if (!baseUrl) throw new Error('updateObject: baseUrl is required');
   const body: Record<string, unknown> = { properties: data, class: className };
   if (vector && vector.length > 0) body.vector = vector;
   const url = `${baseUrl.replace(/\/+$/, '')}/v1/objects/${className}/${id}`;

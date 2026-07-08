@@ -101,6 +101,85 @@ npm run preview
 
 The default connection URL is `http://localhost:8080` — change it via the "Connections" button in the sidebar after launch.
 
+## 🔒 CORS Configuration
+
+Weaviate Manager runs entirely in the browser, so your Weaviate instance must allow cross-origin requests (CORS).
+
+### Docker / Docker Compose
+
+Set the `CORS_ALLOWED_ORIGINS` environment variable:
+
+```bash
+docker run -d -p 8080:8080 \
+  -e CORS_ALLOWED_ORIGINS='*' \
+  -e AUTHENTICATION_ANONYMOUS_ACCESS_ENABLED='true' \
+  --name weaviate semitechnologies/weaviate:latest
+```
+
+Or in `docker-compose.yml`:
+
+```yaml
+services:
+  weaviate:
+    image: semitechnologies/weaviate:latest
+    ports:
+      - "8080:8080"
+    environment:
+      CORS_ALLOWED_ORIGINS: '*'  # or 'https://your-domain.com'
+      AUTHENTICATION_ANONYMOUS_ACCESS_ENABLED: 'true'
+```
+
+### Weaviate Cloud (WCD)
+
+CORS is enabled by default — no additional configuration needed. Just paste your endpoint URL and API key.
+
+### Self-hosted / Kubernetes
+
+Add to your deployment manifest:
+
+```yaml
+env:
+  - name: CORS_ALLOWED_ORIGINS
+    value: '*'
+```
+
+### Troubleshooting
+
+**CORS errors in the browser console?**
+
+1. Verify your Weaviate instance has `CORS_ALLOWED_ORIGINS` set
+2. If using a proxy/load balancer, ensure it forwards the `Origin` header
+3. For local development, use `http://localhost:5173` (Vite dev server) as an allowed origin
+
+## 🚀 Deployment
+
+### Static Hosting (Recommended)
+
+```bash
+npm run build
+# Upload the dist/ folder to any static host:
+```
+
+| Platform | Guide |
+|---|---|
+| **Vercel** | `npm run build` → drag `dist/` into Vercel dashboard |
+| **GitHub Pages** | Use the GitHub Actions workflow (`.github/workflows/deploy.yml`) |
+| **Netlify** | Drag `dist/` folder, set build command to `npm run build` |
+| **Nginx** | Copy `dist/` to your server, point root to it |
+
+### Environment Variables (Optional)
+
+Create a `.env` file in the project root:
+
+```bash
+# Preset default Weaviate connection (optional)
+VITE_DEFAULT_WEAVIATE_URL=http://localhost:8080
+VITE_DEFAULT_API_KEY=
+
+# Custom app title (optional)
+VITE_APP_TITLE=Weaviate Manager
+```
+
 ## 🛠️ Tech Stack
 
 | Layer | Tech |
@@ -130,6 +209,7 @@ src/
 ├── pages/                # Route-level pages (Dashboard, DataPage)
 ├── services/             # Weaviate API wrapper
 ├── stores/               # Zustand stores (app state, query history)
+├── utils/                # Utilities (crypto, error handling)
 ├── App.tsx               # Root with theme + i18n providers
 └── main.tsx              # Entry point
 ```
@@ -147,13 +227,13 @@ src/
 
 ### Environment
 
-No environment variables needed — all configuration is done via the UI.
+Basic usage requires no configuration — all settings are managed via the UI. For preset defaults, you can optionally use the environment variables listed in the [Deployment](#deployment) section above.
 
 ### Persistence
 
 The app stores the following in `localStorage`:
 
-- **Cluster configs** — saved Weaviate connections (`weaviate_clusters`)
+- **Cluster configs** — saved Weaviate connections with **AES-256 encrypted** API keys (`weaviate_clusters`)
 - **Theme preferences** — mode and color (`weaviate_theme_prefs`)
 - **UI preferences** — sidebar state (`weaviate_ui_prefs`)
 - **Query history** — past GraphQL / search queries (`weaviate_query_history`)

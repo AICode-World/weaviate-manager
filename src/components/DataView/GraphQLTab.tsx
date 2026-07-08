@@ -17,7 +17,7 @@ const Editor = lazy(async () => {
 
 const GraphQLTab: React.FC = () => {
   const { t } = useI18n();
-  const { client, url } = useAppStore();
+  const { client, url, cred } = useAppStore();
   const [query, setQuery] = useState('{\n  Get {\n    \n  }\n}');
   const [result, setResult] = useState<unknown>(null);
   const [error, setError] = useState<string | null>(null);
@@ -51,8 +51,10 @@ const GraphQLTab: React.FC = () => {
     setLoading(true); setError(null); setResult(null);
     try {
       const graphqlUrl = `${url.replace(/\/+$/, '')}/v1/graphql`;
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (cred) headers['Authorization'] = `Bearer ${cred}`;
       const res = await fetch(graphqlUrl, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        method: 'POST', headers,
         body: JSON.stringify({ query }),
       });
       const data = await res.json();

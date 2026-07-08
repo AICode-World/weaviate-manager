@@ -10,7 +10,34 @@ import { useNavigate } from 'react-router-dom';
 import useAppStore from '../stores/appStore';
 import { useI18n } from '../i18n/I18nProvider';
 
-const CHART_COLORS = ['#1677ff', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4', '#f97316', '#84cc16'];
+// 根据品牌色动态生成图表色板（HSL 色相均匀分布）
+function generateChartColors(baseColor: string, count: number = 8): string[] {
+  // 将 hex 转 HSL
+  const hex = baseColor.replace('#', '');
+  const r = parseInt(hex.substring(0, 2), 16) / 255;
+  const g = parseInt(hex.substring(2, 4), 16) / 255;
+  const b = parseInt(hex.substring(4, 6), 16) / 255;
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  const l = (max + min) / 2;
+  let h = 0;
+  let s = 0;
+  if (max !== min) {
+    const d = max - min;
+    s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+    if (max === r) h = ((g - b) / d + (g < b ? 6 : 0)) / 6;
+    else if (max === g) h = ((b - r) / d + 2) / 6;
+    else h = ((r - g) / d + 4) / 6;
+  }
+  const baseHue = Math.round(h * 360);
+  const baseSat = Math.round(s * 100);
+  const baseLight = Math.round(l * 100);
+
+  return Array.from({ length: count }, (_, i) => {
+    const hue = (baseHue + (360 / count) * i) % 360;
+    return `hsl(${hue}, ${Math.max(baseSat, 45)}%, ${baseLight}%)`;
+  });
+}
 
 const Dashboard: React.FC = () => {
   const { t } = useI18n();
@@ -18,7 +45,7 @@ const Dashboard: React.FC = () => {
   const { message } = App.useApp();
   const {
     connectionStatus, client, collections,
-    dashboardData, dashboardLoading,
+    dashboardData, dashboardLoading, themeColor,
     setCurrentCollection, fetchDashboardData,
   } = useAppStore();
 
@@ -180,7 +207,7 @@ const Dashboard: React.FC = () => {
                   label={{ text: 'name', style: { fontSize: 11 } }}
                   legend={{ color: { position: 'bottom' } }}
                   style={{ stroke: 'var(--color-bg-base)', lineWidth: 2 }}
-                  scale={{ color: { range: CHART_COLORS } }}
+                  scale={{ color: { range: generateChartColors(themeColor) } }}
                 />
               </Card>
             </Col>
@@ -194,7 +221,7 @@ const Dashboard: React.FC = () => {
                   height={240}
                   label={{ text: (d: { count: number }) => d.count.toLocaleString(), textBaseline: 'bottom' }}
                   style={{ radiusTopLeft: 4, radiusTopRight: 4 }}
-                  scale={{ color: { range: CHART_COLORS } }}
+                  scale={{ color: { range: generateChartColors(themeColor) } }}
                   axis={{ y: { labelFormatter: (v: number) => v.toLocaleString() } }}
                 />
               </Card>

@@ -1,6 +1,8 @@
 import { create } from 'zustand';
 import type { WeaviateClient } from 'weaviate-ts-client';
 import * as weaviateApi from '../services/weaviate';
+import { encrypt, decrypt, isEncrypted } from '../utils/crypto';
+import { wrapError, reportError, userFriendlyMessage } from '../utils/errorHandler';
 
 /** 集群配置 */
 export interface ClusterConfig {
@@ -69,8 +71,44 @@ function loadClustersFromStorage(): ClusterConfig[] {
   }
 }
 
-function saveClustersToStorage(clusters: ClusterConfig[]) {
-  localStorage.setItem(CLUSTERS_KEY, JSON.stringify(clusters));
+async function decryptClusterApiKeys(clusters: ClusterConfig[]): Promise<ClusterConfig[]> {
+  const result: ClusterConfig[] = [];
+  for (const c of clusters) {
+    const cluster = { ...c };
+    if (c.apiKey && isEncrypted(JSON.parse(c.apiKey))) {
+      try {
+        const encrypted = JSON.parse(c.apiKey);
+        cluster.apiKey = await decrypt(encrypted);
+      } catch {
+        // 解密失败保留密文，用户需要重新输入
+        cluster.apiKey = '';
+      }
+    }
+    result.push(cluster);
+  }
+  return result;
+}
+
+async function encryptClusterApiKeys(clusters: ClusterConfig[]): Promise<ClusterConfig[]> {
+  const result: ClusterConfig[] = [];
+  for (const c of clusters) {
+    const cluster = { ...c };
+    if (cluster.apiKey && !isEncrypted(cluster.apiKey)) {
+      try {
+        const encrypted = await encrypt(cluster.apiKey);
+        cluster.apiKey = JSON.stringify(encrypted);
+      } catch {
+        // 加密失败保留明文
+      }
+    }
+    result.push(cluster);
+  }
+  return result;
+}
+
+async function saveClustersToStorage(clusters: ClusterConfig[]) {
+  const secured = await encryptClusterApiKeys(clusters);
+  localStorage.setItem(CLUSTERS_KEY, JSON.stringify(secured));
 }
 
 interface AppStore {
@@ -207,7 +245,8 @@ const useAppStore = create<AppStore>((set, get) => ({
       if (currentCollection && !list.includes(currentCollection)) {
         set({ currentCollection: null, currentData: [], totalCount: 0, cursors: { after: null, before: null }, paginationCurrent: 1 });
       }
-    } catch {
+    } catch (e) {
+      reportError(wrapError(e, 'refreshCollections'));
       set({ isRefreshing: false });
     }
   },
@@ -230,8 +269,33 @@ const useAppStore = create<AppStore>((set, get) => ({
   setMultiModalSearching: (loading) => set({ isMultiModalSearching: loading }),
 
   // ============ 多集群 ============
-  loadClusters: () => {
-    const clusters = loadClustersFromStorage();
+  loadClusters: async () => {
+    const raw = loadClustersFromStorage();
+    // 解密 API Keys + 检测是否需要迁移明文旧数据
+    let needsMigration = false;
+    const clusters = await decryptClusterApiKeys(raw);
+    // 检查是否有未加密的明文 key 需要迁移
+    for (const c of raw) {
+      if (c.apiKey && !isEncrypted(c.apiKey)) needsMigration = true;
+    }
+    if (needsMigration) {
+      await saveClustersToStorage(clusters);
+    }
+
+    // 自动发现环境变量中预设的默认连接
+    const defaultUrl = import.meta.env.VITE_DEFAULT_WEAVIATE_URL;
+    const defaultApiKey = import.meta.env.VITE_DEFAULT_API_KEY ?? '';
+    if (defaultUrl && !clusters.some((c) => c.url === defaultUrl)) {
+      const envCluster: ClusterConfig = {
+        id: `env-${Date.now()}`,
+        name: defaultApiKey ? 'Env Default (auth)' : 'Env Default',
+        url: defaultUrl,
+        apiKey: defaultApiKey,
+        isDefault: clusters.length === 0,
+      };
+      clusters.unshift(envCluster);
+    }
+
     const active = clusters.find((c) => c.isDefault)?.id ?? clusters[0]?.id ?? null;
     set({ clusters, activeClusterId: active });
   },
@@ -294,7 +358,8 @@ const useAppStore = create<AppStore>((set, get) => ({
     try {
       const data = await weaviateApi.getDashboardData(client);
       set({ dashboardData: data, dashboardLoading: false });
-    } catch {
+    } catch (e) {
+      reportError(wrapError(e, 'fetchDashboardData'));
       set({ dashboardLoading: false });
     }
   },
