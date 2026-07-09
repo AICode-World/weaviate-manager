@@ -16,7 +16,7 @@ export function isEncrypted(value: unknown): value is { iv: string; salt: string
 }
 
 /** 从 origin 派生 AES-GCM 密钥 */
-async function deriveKey(salt: Uint8Array): Promise<CryptoKey> {
+async function deriveKey(salt: Uint8Array<ArrayBuffer>): Promise<CryptoKey> {
   const enc = new TextEncoder();
   // 使用 origin 作为基础种子，确保同源可解密
   const origin = typeof window !== 'undefined' ? window.location.origin : 'weaviate-manager';
@@ -40,14 +40,14 @@ function toBase64(buffer: Uint8Array): string {
   return btoa(String.fromCharCode(...buffer));
 }
 
-function fromBase64(base64: string): Uint8Array {
-  return Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
+function fromBase64(base64: string): Uint8Array<ArrayBuffer> {
+  return new Uint8Array(Uint8Array.from(atob(base64), (c) => c.charCodeAt(0)).buffer as ArrayBuffer);
 }
 
 /** 加密明文 */
 export async function encrypt(plaintext: string): Promise<{ iv: string; salt: string; ciphertext: string }> {
-  const salt = crypto.getRandomValues(new Uint8Array(SALT_LENGTH));
-  const iv = crypto.getRandomValues(new Uint8Array(IV_LENGTH));
+  const salt = new Uint8Array(crypto.getRandomValues(new Uint8Array(SALT_LENGTH)).buffer as ArrayBuffer);
+  const iv = new Uint8Array(crypto.getRandomValues(new Uint8Array(IV_LENGTH)).buffer as ArrayBuffer);
   const key = await deriveKey(salt);
   const enc = new TextEncoder();
   const ciphertext = await crypto.subtle.encrypt(

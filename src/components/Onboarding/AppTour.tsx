@@ -9,8 +9,8 @@ interface AppTourProps {
   refs: {
     connection: React.RefObject<HTMLDivElement | null>;
     collections: React.RefObject<HTMLDivElement | null>;
-    dashboardBtn: React.RefObject<HTMLButtonElement | null>;
-    dataBtn: React.RefObject<HTMLButtonElement | null>;
+    dashboardBtn: React.RefObject<HTMLDivElement | null>;
+    dataBtn: React.RefObject<HTMLDivElement | null>;
   };
 }
 

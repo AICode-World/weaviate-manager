@@ -302,7 +302,7 @@ export async function updateObject(
   className: string,
   id: string,
   data: Record<string, unknown>,
-  vector?: number[],
+  vector: number[] | undefined,
   baseUrl: string,
 ): Promise<void> {
   if (!baseUrl) throw new Error('updateObject: baseUrl is required');

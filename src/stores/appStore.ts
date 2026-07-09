@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import type { WeaviateClient } from 'weaviate-ts-client';
 import * as weaviateApi from '../services/weaviate';
 import { encrypt, decrypt, isEncrypted } from '../utils/crypto';
-import { wrapError, reportError, userFriendlyMessage } from '../utils/errorHandler';
+import { wrapError, reportError } from '../utils/errorHandler';
 
 /** 集群配置 */
 export interface ClusterConfig {
