@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import {
   Button, Table, Tag, Modal, Form, Input, Select,
-  Popconfirm, Space, message, Typography, Alert, Empty, Spin, Collapse,
+  Popconfirm, Space, message, Typography, Alert, Empty, Spin, Collapse, Switch,
 } from 'antd';
 import {
   AppstoreOutlined, PlusOutlined, DeleteOutlined, ReloadOutlined, ApiOutlined,
@@ -63,6 +63,7 @@ const SchemaManager: React.FC = () => {
       const properties: CollectionProperty[] = (values.properties || []).map((p: { name: string; dataType: string }) => ({
         name: p.name,
         dataType: [p.dataType] as PropertyDataType[],
+        vectorize: true,
       }));
       await createCollection(client, values.name, properties, values.vectorizer);
       message.success(t('collectionCreated'));
@@ -92,11 +93,15 @@ const SchemaManager: React.FC = () => {
     if (!client || !propTarget) return;
     try {
       const values = await propForm.validateFields();
+      // 查找目标集合的 vectorizer
+      const targetSchema = schemas.find((s) => s.name === propTarget);
+      const vectorizer = targetSchema?.vectorizer;
       await addProperty(client, propTarget, {
         name: values.name,
         dataType: [values.dataType] as PropertyDataType[],
         description: values.description,
-      });
+        vectorize: values.vectorize !== false,
+      }, vectorizer);
       message.success(t('propertyAdded'));
       setPropModalOpen(false);
       propForm.resetFields();
@@ -264,11 +269,11 @@ const SchemaManager: React.FC = () => {
         open={propModalOpen}
         onCancel={() => { setPropModalOpen(false); propForm.resetFields(); setPropTarget(null); }}
         onOk={handleAddProperty}
-        okText={t('confirm')}
+        okText={t('addProperty')}
         cancelText={t('cancel')}
         destroyOnHidden
       >
-        <Form form={propForm} layout="vertical" style={{ marginTop: 16 }}>
+        <Form form={propForm} layout="vertical" style={{ marginTop: 16 }} initialValues={{ vectorize: false }}>
           <Form.Item name="name" label={t('propertyName')} rules={[{ required: true }]}>
             <Input placeholder={t('propertyName')} />
           </Form.Item>
@@ -278,8 +283,14 @@ const SchemaManager: React.FC = () => {
               placeholder={t('dataType')}
             />
           </Form.Item>
-          <Form.Item name="description" label="Description">
-            <Input.TextArea rows={2} />
+          <Form.Item name="description" label={t('description')}>
+            <Input.TextArea rows={2} placeholder={t('descriptionPlaceholder')} />
+          </Form.Item>
+          <Form.Item name="vectorize" label={t('vectorizeIndex')} valuePropName="checked" tooltip={t('vectorizeIndexHint')}>
+            <Switch disabled={!(() => {
+              const targetSchema = schemas.find((s) => s.name === propTarget);
+              return targetSchema?.vectorizer && targetSchema.vectorizer !== 'none';
+            })()} />
           </Form.Item>
         </Form>
       </Modal>

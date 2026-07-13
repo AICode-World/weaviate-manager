@@ -38,7 +38,9 @@ export async function getClassProperties(
   className: string,
 ): Promise<Array<{ name: string; dataType: string[] }>> {
   const schema = await client.schema.classGetter().withClassName(className).do();
-  return ((schema as Record<string, unknown>).properties ?? []) as Array<{ name: string; dataType: string[] }>;
+  // 兼容不同版本的返回格式：可能是对象或数组
+  const schemaObj = Array.isArray(schema) ? schema[0] : schema;
+  return ((schemaObj as Record<string, unknown>)?.properties ?? []) as Array<{ name: string; dataType: string[] }>;
 }
 
 /** 获取对象（支持游标分页或 offset 分页） */
@@ -54,22 +56,26 @@ export async function fetchObjects(
   after: string | null;
   before: string | null;
 }> {
-  const props = await getClassProperties(client, className);
-  const propNames = props.map((p) => p.name);
-  const allFields = [...propNames, '_additional { id vector }'];
-  const fieldsStr = allFields.join(' ');
-
-  // 使用 offset 分页时走 raw GraphQL（ts-client 有限制）
-  let result: Record<string, unknown>;
-  if (offset !== undefined) {
-    const offsetArg = offset > 0 ? `, offset: ${offset}` : '';
-    const query = `{ Get { ${className}(limit: ${limit}${offsetArg}) { ${fieldsStr} } } }`;
-    result = await client.graphql.raw().withQuery(query).do();
-  } else {
-    const gqlGet = client.graphql.get().withClassName(className).withLimit(limit).withFields(fieldsStr);
-    if (after) gqlGet.withAfter(after);
-    result = await gqlGet.do();
+  // 获取属性列表（失败时用空列表，仍然可以查询 _additional）
+  let propNames: string[] = [];
+  try {
+    const props = await getClassProperties(client, className);
+    propNames = props.map((p) => p.name);
+  } catch {
+    // getClassProperties 失败不影响基本查询
   }
+  const propFields = propNames.length > 0 ? propNames.join(' ') + ' ' : '';
+  const fieldsStr = `${propFields}_additional { id }`;
+
+  // 统一使用 raw GraphQL 查询（兼容性最好）
+  let paginationArg = `limit: ${limit}`;
+  if (offset !== undefined && offset > 0) {
+    paginationArg += `, offset: ${offset}`;
+  } else if (after) {
+    paginationArg += `, after: "${after}"`;
+  }
+  const query = `{ Get { ${className}(${paginationArg}) { ${fieldsStr} } } }`;
+  const result = await client.graphql.raw().withQuery(query).do();
 
   const rawData = (result.data as Record<string, unknown>)?.Get as Record<string, unknown> | undefined;
   const rawObjects = (rawData?.[className] ?? []) as Record<string, unknown>[];
@@ -80,13 +86,16 @@ export async function fetchObjects(
   });
 
   // 总数
-  const countResult = await client.graphql
-    .aggregate()
-    .withClassName(className)
-    .withFields('meta { count }')
-    .do();
-  const aggData = (countResult.data as Record<string, unknown>)?.Aggregate as Record<string, unknown> | undefined;
-  const total = (aggData?.[className] as Array<{ meta: { count: number } }>)?.[0]?.meta?.count ?? 0;
+  let total = 0;
+  try {
+    const countQuery = `{ Aggregate { ${className} { meta { count } } } }`;
+    const countResult = await client.graphql.raw().withQuery(countQuery).do();
+    const aggData = (countResult.data as Record<string, unknown>)?.Aggregate as Record<string, unknown> | undefined;
+    total = (aggData?.[className] as Array<{ meta: { count: number } }>)?.[0]?.meta?.count ?? 0;
+  } catch {
+    // 聚合查询失败时用返回的对象数量作为 fallback
+    total = objects.length;
+  }
 
   const lastItem = objects.slice(-1)[0];
   const firstItem = objects[0];
@@ -103,12 +112,14 @@ export async function searchBM25(
   query: string,
   limit: number = 20,
 ): Promise<Record<string, unknown>[]> {
-  const props = await getClassProperties(client, className);
-  const propNames = props.map((p) => p.name);
-  const gqlGet = client.graphql.get().withClassName(className).withBm25({ query }).withLimit(limit)
-    .withFields([...propNames, '_additional { id score }'].join(' '));
-
-  const result = await gqlGet.do();
+  let propNames: string[] = [];
+  try {
+    const props = await getClassProperties(client, className);
+    propNames = props.map((p) => p.name);
+  } catch { /* ignore */ }
+  const propFields = propNames.length > 0 ? propNames.join(' ') + ' ' : '';
+  const queryStr = `{ Get { ${className}(limit: ${limit}, bm25: {query: "${query.replace(/"/g, '\\"')}"}) { ${propFields}_additional { id score } } } }`;
+  const result = await client.graphql.raw().withQuery(queryStr).do();
   const rawData = (result.data as Record<string, unknown>)?.Get as Record<string, unknown> | undefined;
   return ((rawData?.[className] ?? []) as Record<string, unknown>[]).map((obj) => {
     const flat: Record<string, unknown> = { ...obj };
@@ -130,16 +141,15 @@ export async function searchNearText(
   limit: number = 20,
   distance: number = 0.7,
 ): Promise<Record<string, unknown>[]> {
-  const props = await getClassProperties(client, className);
-  const propNames = props.map((p) => p.name);
-  const gqlGet = client.graphql
-    .get()
-    .withClassName(className)
-    .withNearText({ concepts: [concepts], distance })
-    .withLimit(limit)
-    .withFields([...propNames, '_additional { id distance }'].join(' '));
-
-  const result = await gqlGet.do();
+  let propNames: string[] = [];
+  try {
+    const props = await getClassProperties(client, className);
+    propNames = props.map((p) => p.name);
+  } catch { /* ignore */ }
+  const propFields = propNames.length > 0 ? propNames.join(' ') + ' ' : '';
+  const escapedConcepts = concepts.replace(/"/g, '\\"');
+  const queryStr = `{ Get { ${className}(limit: ${limit}, nearText: {concepts: ["${escapedConcepts}"], distance: ${distance}}) { ${propFields}_additional { id distance } } } }`;
+  const result = await client.graphql.raw().withQuery(queryStr).do();
   const rawData = (result.data as Record<string, unknown>)?.Get as Record<string, unknown> | undefined;
   return ((rawData?.[className] ?? []) as Record<string, unknown>[]).map((obj) => {
     const flat: Record<string, unknown> = { ...obj };
@@ -226,11 +236,8 @@ async function getCollectionStats(
   // 对象数量
   let count = 0;
   try {
-    const aggRes = await client.graphql
-      .aggregate()
-      .withClassName(className)
-      .withFields('meta { count }')
-      .do();
+    const countQuery = `{ Aggregate { ${className} { meta { count } } } }`;
+    const aggRes = await client.graphql.raw().withQuery(countQuery).do();
     const aggData = (aggRes.data as Record<string, unknown>)?.Aggregate as Record<string, unknown> | undefined;
     count = (aggData?.[className] as Array<{ meta: { count: number } }>)?.[0]?.meta?.count ?? 0;
   } catch {
@@ -344,6 +351,9 @@ export interface CollectionProperty {
   name: string;
   dataType: PropertyDataType[];
   description?: string;
+  /** 是否参与向量化（仅对有 vectorizer 的集合有效，默认 true） */
+  vectorize?: boolean;
+  tokenization?: string;
 }
 
 /** 集合 Schema 详情 */
@@ -379,11 +389,21 @@ export async function createCollection(
 ): Promise<void> {
   const classConfig: Record<string, unknown> = {
     class: name,
-    properties: properties.map((p) => ({
-      name: p.name,
-      dataType: p.dataType,
-      ...(p.description ? { description: p.description } : {}),
-    })),
+    properties: properties.map((p) => {
+      const prop: Record<string, unknown> = {
+        name: p.name,
+        dataType: p.dataType,
+      };
+      if (p.description) prop.description = p.description;
+      if (p.tokenization) prop.tokenization = p.tokenization;
+      // 如果集合有 vectorizer，根据 vectorize 开关设置 moduleConfig
+      if (vectorizer && vectorizer !== 'none') {
+        prop.moduleConfig = {
+          [vectorizer]: { skip: p.vectorize === false },
+        };
+      }
+      return prop;
+    }),
   };
   if (vectorizer && vectorizer !== 'none') {
     classConfig.vectorizer = vectorizer;
@@ -403,11 +423,21 @@ export async function addProperty(
   client: WeaviateClient,
   className: string,
   property: CollectionProperty,
+  vectorizer?: string,
 ): Promise<void> {
   const propConfig: Record<string, unknown> = {
     name: property.name,
     dataType: property.dataType,
   };
   if (property.description) propConfig.description = property.description;
+  if (property.tokenization) propConfig.tokenization = property.tokenization;
+
+  // 如果集合有 vectorizer，根据 vectorize 开关设置 moduleConfig
+  if (vectorizer && vectorizer !== 'none') {
+    propConfig.moduleConfig = {
+      [vectorizer]: { skip: property.vectorize === false },
+    };
+  }
+
   await client.schema.propertyCreator().withClassName(className).withProperty(propConfig).do();
 }

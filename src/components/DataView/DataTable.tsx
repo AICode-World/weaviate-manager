@@ -90,9 +90,10 @@ const DataTable: React.FC<{
       setData(result.objects, result.total, { after: result.after, before: result.before });
       setPaginationPage(page);
     } catch (e: unknown) {
+      console.error('[DataTable] loadData error:', e);
       message.error(e instanceof Error ? e.message : t('loadFail'));
     } finally { setLoading(false); }
-  }, [client, currentCollection, setData, setLoading, setPaginationPage, setSearchResults]);
+  }, [client, currentCollection, setData, setLoading, setPaginationPage, setSearchResults, t, message]);
 
   const loadSearchResults = useCallback(async () => {
     if (!client || !currentCollection || !searchQuery.trim()) return;

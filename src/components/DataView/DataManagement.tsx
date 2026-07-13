@@ -1,7 +1,7 @@
 import { useState, useEffect, forwardRef, useImperativeHandle } from 'react';
 import {
   Button, Modal, Form, Input, InputNumber, Upload, Popconfirm,
-  Space, Progress, Select, DatePicker, Alert, App,
+  Space, Progress, Select, DatePicker, Alert, App, Radio, Checkbox, Switch, Typography,
 } from 'antd';
 import {
   PlusOutlined, ExportOutlined, ImportOutlined, DeleteOutlined,
@@ -12,7 +12,7 @@ import dayjs from 'dayjs';
 import useAppStore from '../../stores/appStore';
 import {
   insertObject, updateObject, deleteObject,
-  getClassProperties,
+  getClassProperties, fetchObjects,
 } from '../../services/weaviate';
 import { useI18n } from '../../i18n/I18nProvider';
 
@@ -93,6 +93,14 @@ const DataManagement = forwardRef<DataManagementHandle, {
   const [originalBlobs, setOriginalBlobs] = useState<Record<string, string | null>>({});
   // 图片预览
   const [previewImage, setPreviewImage] = useState<string | null>(null);
+  // 导出 CSV 弹窗
+  const [exportModalOpen, setExportModalOpen] = useState(false);
+  const [exportRange, setExportRange] = useState<'all' | 'selected' | 'current'>('all');
+  const [availableFields, setAvailableFields] = useState<string[]>([]);
+  const [exportFields, setExportFields] = useState<string[]>([]);
+  const [exportEncoding, setExportEncoding] = useState('UTF-8');
+  const [exportHeader, setExportHeader] = useState(true);
+  const [exporting, setExporting] = useState(false);
 
   // 实时检测 blob 是否被更换
   const blobFieldNames = fields.filter((f) => f.isBlob).map((f) => f.name);
@@ -294,16 +302,95 @@ const DataManagement = forwardRef<DataManagementHandle, {
     onRefresh();
   };
 
-  /** 导出 CSV：有选中则导出选中，无选中则提示 */
-  const handleExport = async () => {
+  /** 导出 CSV：打开导出弹窗 */
+  const handleExport = () => {
+    if (!currentCollection) return;
+    // 从 Weaviate Schema 获取完整属性列表（而非从行数据中提取）
+    const fieldList = fields.map((f) => f.name);
+    setAvailableFields(fieldList);
+    setExportFields(fieldList); // 默认全选
+    // 如果有选中数据，默认选中模式
+    setExportRange(selectedRowKeys.length > 0 ? 'selected' : 'all');
+    setExportModalOpen(true);
+  };
+
+  /** 执行导出 */
+  const doExport = async () => {
     if (!client || !currentCollection) return;
+    setExporting(true);
+    try {
+      const { currentData, searchResults, searchQuery, paginationCurrent } = useAppStore.getState();
+      const isSearchMode = searchResults.length > 0 || !!searchQuery.trim();
 
-    if (selectedRowKeys.length > 0) {
-      handleExportSelected();
-      return;
+      let rowsToExport: Record<string, unknown>[] = [];
+
+      if (exportRange === 'all') {
+        if (isSearchMode) {
+          // 搜索模式下"全部"=所有搜索结果
+          rowsToExport = searchResults;
+        } else {
+          // 从 Weaviate 拉取全部数据（分页遍历）
+          const allRows: Record<string, unknown>[] = [];
+          let after: string | undefined;
+          // eslint-disable-next-line no-constant-condition
+          while (true) {
+            const result = await fetchObjects(client, currentCollection, 100, after);
+            allRows.push(...result.objects);
+            if (result.after && result.objects.length === 100) {
+              after = result.after;
+            } else {
+              break;
+            }
+          }
+          rowsToExport = allRows;
+        }
+      } else if (exportRange === 'selected') {
+        const displayData = isSearchMode ? searchResults : currentData;
+        rowsToExport = displayData.filter((row) => selectedRowKeys.includes(row.__id as string));
+      } else {
+        // 当前页
+        const displayData = isSearchMode ? searchResults : currentData;
+        rowsToExport = displayData;
+      }
+
+      if (rowsToExport.length === 0) {
+        message.warning(t('noDataExport'));
+        return;
+      }
+
+      const headers = exportFields.length > 0
+        ? exportFields
+        : fields.map((f) => f.name);
+      const csvRows: string[] = [];
+      if (exportHeader) {
+        csvRows.push(headers.join(','));
+      }
+      for (const row of rowsToExport) {
+        const vals = headers.map((h) => {
+          const v = row[h];
+          if (v === null || v === undefined) return '';
+          if (typeof v === 'string' && v.startsWith('data:')) return t('exists');
+          const s = String(v);
+          return s.includes(',') || s.includes('"') ? `"${s.replace(/"/g, '""')}"` : s;
+        });
+        csvRows.push(vals.join(','));
+      }
+      const bom = exportEncoding === 'UTF-8' ? '\ufeff' : '';
+      const blob = new Blob([bom + csvRows.join('\n')], { type: `text/csv;charset=${exportEncoding}` });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      const rangeSuffix = exportRange === 'selected' ? '_selected' : exportRange === 'current' ? `_page${paginationCurrent}` : '_all';
+      a.download = `${currentCollection}${rangeSuffix}_${new Date().toISOString().slice(0, 10)}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+      message.success(t('exportDone', { n: rowsToExport.length }));
+      setExportModalOpen(false);
+    } catch (e: unknown) {
+      message.error(e instanceof Error ? e.message : t('operationFail'));
+    } finally {
+      setExporting(false);
     }
-
-    message.warning({ content: t('selectDataToExport'), key: 'export' });
   };
 
 
@@ -523,6 +610,89 @@ const DataManagement = forwardRef<DataManagementHandle, {
         centered
       >
         {previewImage && <img src={previewImage} style={{ maxWidth: '80vw', maxHeight: '80vh' }} alt="preview" />}
+      </Modal>
+
+      {/* 导出 CSV 弹窗 */}
+      <Modal
+        title={t('exportCSV')}
+        open={exportModalOpen}
+        onCancel={() => setExportModalOpen(false)}
+        footer={
+          <Space>
+            <Button onClick={() => setExportModalOpen(false)} disabled={exporting}>{t('cancel')}</Button>
+            <Button type="primary" onClick={doExport} loading={exporting}>{t('exportCSV')}</Button>
+          </Space>
+        }
+        width={560}
+        destroyOnHidden
+      >
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 20, marginTop: 16 }}>
+          {/* 导出范围 */}
+          <div>
+            <Typography.Text strong style={{ display: 'block', marginBottom: 10 }}>{t('exportRange')}</Typography.Text>
+            <Radio.Group value={exportRange} onChange={(e) => setExportRange(e.target.value)}>
+              <Space direction="vertical" size={8}>
+                <Radio value="all">{t('exportAllData')}</Radio>
+                <Radio value="selected" disabled={selectedRowKeys.length === 0}>
+                  {t('exportSelectedData')} ({selectedRowKeys.length} {t('records')})
+                </Radio>
+                <Radio value="current">{t('exportCurrentPage')}</Radio>
+              </Space>
+            </Radio.Group>
+          </div>
+          {/* 导出字段 */}
+          <div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, paddingBottom: 8, borderBottom: '1px solid #F0F0F0' }}>
+              <Typography.Text strong>{t('exportFields')}</Typography.Text>
+              <Checkbox
+                checked={availableFields.length > 0 && exportFields.length === availableFields.length}
+                indeterminate={exportFields.length > 0 && exportFields.length < availableFields.length}
+                onChange={(e) => {
+                  if (e.target.checked) {
+                    setExportFields([...availableFields]);
+                  } else {
+                    setExportFields([]);
+                  }
+                }}
+              >
+                {t('selectAll')} ({exportFields.length}/{availableFields.length})
+              </Checkbox>
+            </div>
+            <Checkbox.Group
+              value={exportFields}
+              onChange={(checked) => setExportFields(checked as string[])}
+              style={{ display: 'flex', flexWrap: 'wrap', gap: '8px 16px' }}
+            >
+              {availableFields.map((field) => (
+                <Checkbox key={field} value={field} style={{ fontSize: 13 }}>{field}</Checkbox>
+              ))}
+            </Checkbox.Group>
+          </div>
+          {/* 格式选项 */}
+          <div>
+            <Typography.Text strong style={{ display: 'block', marginBottom: 10 }}>{t('formatOptions')}</Typography.Text>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <Typography.Text type="secondary">{t('fileEncoding')}</Typography.Text>
+                <Select
+                  value={exportEncoding}
+                  onChange={setExportEncoding}
+                  size="small"
+                  style={{ width: 120 }}
+                  options={[
+                    { label: 'UTF-8', value: 'UTF-8' },
+                    { label: 'GBK', value: 'GBK' },
+                    { label: 'ASCII', value: 'ASCII' },
+                  ]}
+                />
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <Typography.Text type="secondary">{t('includeHeader')}</Typography.Text>
+                <Switch checked={exportHeader} onChange={setExportHeader} size="small" />
+              </div>
+            </div>
+          </div>
+        </div>
       </Modal>
     </>
   );

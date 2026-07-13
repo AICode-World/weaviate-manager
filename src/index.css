@@ -428,3 +428,279 @@ body *::after {
     opacity: 1;
   }
 }
+
+/* ============ 页面头部 ============ */
+.page-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 20px;
+}
+.page-title {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--color-text-primary);
+}
+.page-subtitle {
+  font-size: 13px;
+  color: var(--color-text-tertiary);
+  margin-top: 2px;
+}
+.page-header-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+/* ============ 统计卡片 ============ */
+.stat-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 14px;
+  margin-bottom: 20px;
+}
+.stat-card {
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-md);
+  padding: 18px;
+  box-shadow: var(--glass-shadow);
+}
+.stat-icon-wrap {
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 10px;
+  font-size: 17px;
+}
+.stat-value {
+  font-size: 26px;
+  font-weight: 700;
+  color: var(--color-text-primary);
+  line-height: 1.2;
+}
+.stat-label {
+  font-size: 12px;
+  color: var(--color-text-tertiary);
+  margin-top: 3px;
+}
+.stat-trend {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 11px;
+  font-weight: 600;
+  margin-top: 6px;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+.stat-trend.up { color: #10b981; background: rgba(16,185,129,0.1); }
+.stat-trend.down { color: #ef4444; background: rgba(239,68,68,0.1); }
+
+/* ============ 趋势图 ============ */
+.chart-bars {
+  display: flex;
+  align-items: flex-end;
+  gap: 6px;
+  height: 140px;
+  padding-top: 8px;
+}
+.chart-bar {
+  flex: 1;
+  border-radius: 4px 4px 0 0;
+  min-height: 4px;
+  transition: opacity 0.2s;
+}
+.chart-bar:hover { opacity: 0.8; }
+.chart-labels {
+  display: flex;
+  gap: 6px;
+  margin-top: 4px;
+}
+.chart-label {
+  flex: 1;
+  text-align: center;
+  font-size: 10px;
+  color: var(--color-text-quaternary);
+}
+
+/* ============ 连接管理卡片 ============ */
+.conn-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 14px;
+  margin-bottom: 16px;
+}
+.conn-card {
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-md);
+  padding: 16px;
+  box-shadow: var(--glass-shadow);
+  position: relative;
+}
+.conn-card-name {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+.conn-card-url {
+  font-size: 12px;
+  color: var(--color-text-quaternary);
+  margin-top: 2px;
+  font-family: 'JetBrains Mono', monospace;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.conn-status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 600;
+}
+.conn-status-badge .dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+}
+.conn-status-connected { background: rgba(16,185,129,0.1); color: #10b981; }
+.conn-status-connected .dot { background: #10b981; }
+.conn-status-disconnected { background: rgba(0,0,0,0.05); color: var(--color-text-tertiary); }
+.conn-status-disconnected .dot { background: #9ca3af; }
+.conn-status-failed { background: rgba(239,68,68,0.1); color: #ef4444; }
+.conn-status-failed .dot { background: #ef4444; }
+.conn-card-meta {
+  display: flex;
+  gap: 14px;
+  margin-bottom: 12px;
+}
+.conn-card-meta-item {
+  font-size: 12px;
+  color: var(--color-text-tertiary);
+}
+.conn-card-meta-item strong {
+  color: var(--color-text-primary);
+  font-weight: 600;
+}
+.conn-card-actions {
+  display: flex;
+  gap: 6px;
+}
+.conn-default-tag {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  font-size: 10px;
+  background: rgba(22,119,255,0.1);
+  color: var(--color-primary, #1677ff);
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-weight: 600;
+}
+.conn-add-card {
+  background: transparent;
+  border: 2px dashed var(--color-border);
+  border-radius: var(--radius-md);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  cursor: pointer;
+  min-height: 160px;
+  transition: border-color 0.15s;
+}
+.conn-add-card:hover { border-color: var(--color-primary, #1677ff); }
+.conn-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 14px;
+}
+.conn-detail-item {
+  text-align: center;
+}
+.conn-detail-item .label {
+  font-size: 11px;
+  color: var(--color-text-quaternary);
+  margin-bottom: 3px;
+}
+.conn-detail-item .value {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--color-text-primary);
+}
+
+/* ============ 设置页 ============ */
+.settings-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--color-border-secondary);
+}
+.settings-row:last-child { border-bottom: none; }
+.settings-label {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--color-text-primary);
+}
+.settings-desc {
+  font-size: 12px;
+  color: var(--color-text-tertiary);
+  margin-top: 2px;
+}
+
+/* ============ 引导页 ============ */
+.onboarding-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: calc(100vh - 120px);
+}
+.onboarding-card {
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-lg);
+  padding: 36px;
+  box-shadow: var(--glass-shadow);
+  max-width: 420px;
+  width: 100%;
+}
+
+/* ============ 多模态搜索 ============ */
+.mm-layout {
+  display: grid;
+  grid-template-columns: 340px 1fr;
+  gap: 16px;
+}
+.mm-results {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 14px;
+}
+
+@media (max-width: 1200px) {
+  .stat-grid { grid-template-columns: repeat(2, 1fr); }
+  .conn-grid { grid-template-columns: repeat(2, 1fr); }
+  .mm-layout { grid-template-columns: 1fr; }
+  .mm-results { grid-template-columns: repeat(2, 1fr); }
+}
+@media (max-width: 768px) {
+  .stat-grid { grid-template-columns: 1fr; }
+  .conn-grid { grid-template-columns: 1fr; }
+  .conn-detail-grid { grid-template-columns: repeat(2, 1fr); }
+  .mm-results { grid-template-columns: 1fr; }
+}
