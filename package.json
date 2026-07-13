@@ -1,7 +1,7 @@
 {
   "name": "weaviate-manager",
   "private": true,
-  "version": "0.1.2-beta",
+  "version": "0.1.4",
   "type": "module",
   "description": "A modern visual management console for Weaviate vector databases — browse collections, query data, run GraphQL, and perform multimodal search.",
   "author": "Yan Xu",
