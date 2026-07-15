@@ -1,0 +1,152 @@
+# ============================================================================
+# Weaviate Manager — Build & Push Docker Image
+# ============================================================================
+# Triggers:
+#   - Push to `main`        → builds and tags as `edge` (bleeding-edge)
+#   - Push tag `v*`         → builds and tags as `latest` + version (release)
+#   - Manual dispatch       → optional "latest" toggle
+#
+# Targets:
+#   - GitHub Container Registry (GHCR) — always, free for public repos
+#   - Docker Hub                         — only if DOCKERHUB_* secrets exist
+#
+# Architectures:
+#   - linux/amd64  (x86 servers, most clouds)
+#   - linux/arm64  (Apple Silicon, Raspberry Pi, AWS Graviton)
+#
+# Required repo settings (Settings → Secrets and variables → Actions):
+#   DOCKERHUB_USERNAME   (optional — only if you want to push to Docker Hub)
+#   DOCKERHUB_TOKEN      (optional — access token from hub.docker.com)
+#
+# Note: this file must live at `.github/workflows/docker.yml` in the repo
+# for GitHub Actions to pick it up. The repo already has `.github/workflows/`,
+# so move this file there (or rename to docker.yml and drop it in).
+# ============================================================================
+
+name: Docker
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      push_latest:
+        description: "Also tag as 'latest' (only meaningful on manual runs)"
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  packages: write   # needed to push to GHCR
+  id-token: write   # needed if you add attestations later
+
+env:
+  # GHCR image name — derived from the repo owner + name
+  GHCR_IMAGE: ghcr.io/${{ github.repository_owner }}/weaviate-manager
+  # Docker Hub image name — override via repo variable if different
+  DOCKERHUB_IMAGE: ${{ vars.DOCKERHUB_IMAGE || 'weaviate-manager' }}
+
+jobs:
+  build:
+    name: Build & Push (multi-arch)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      # ------------------------------------------------------------------
+      # 1. Checkout
+      # ------------------------------------------------------------------
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # ------------------------------------------------------------------
+      # 2. Set up QEMU (for cross-building arm64 on amd64 runners)
+      # ------------------------------------------------------------------
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      # ------------------------------------------------------------------
+      # 3. Set up Docker Buildx (multi-platform builder)
+      # ------------------------------------------------------------------
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # ------------------------------------------------------------------
+      # 4. Log in to registries
+      # ------------------------------------------------------------------
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Log in to Docker Hub
+        if: ${{ secrets.DOCKERHUB_USERNAME != '' && secrets.DOCKERHUB_TOKEN != '' }}
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      # ------------------------------------------------------------------
+      # 5. Extract metadata (tags, labels) from git
+      #    - Tag push `v0.1.4` → tags `0.1.4`, `latest`, `sha-xxxxxxx`
+      #    - Branch push `main` → tags `edge`, `sha-xxxxxxx`
+      # ------------------------------------------------------------------
+      - name: Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: |
+            ${{ env.GHCR_IMAGE }}
+            ${{ secrets.DOCKERHUB_USERNAME != '' && env.DOCKERHUB_IMAGE || '' }}
+          tags: |
+            # release tags from vX.Y.Z git tags
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
+            # branch name for non-tag pushes
+            type=edge,enable=${{ github.ref == 'refs/heads/main' }}
+            # short commit SHA — always
+            type=sha,prefix=,format=short
+            # manual "latest" tag (on release it's automatic via semver)
+            type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') || inputs.push_latest == true }}
+          labels: |
+            org.opencontainers.image.title=Weaviate Manager
+            org.opencontainers.image.description=A modern visual management console for Weaviate vector databases
+            org.opencontainers.image.vendor=AICode-World
+
+      # ------------------------------------------------------------------
+      # 6. Build & push
+      # ------------------------------------------------------------------
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            VITE_DEFAULT_WEAVIATE_URL=http://localhost:8080
+            VITE_APP_TITLE=Weaviate Manager
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          provenance: false
+          sbom: false
+
+      # ------------------------------------------------------------------
+      # 7. Update Docker Hub description from README (only on tag push)
+      # ------------------------------------------------------------------
+      - name: Update Docker Hub description
+        if: ${{ startsWith(github.ref, 'refs/tags/v') && secrets.DOCKERHUB_USERNAME != '' }}
+        uses: peter-evans/dockerhub-description@v4
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          repository: ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.DOCKERHUB_IMAGE }}
+          readme-filepath: ./README.md
+          short-description: "A modern visual management console for Weaviate vector databases"

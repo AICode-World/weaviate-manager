@@ -1,0 +1,75 @@
+# Weaviate + Weaviate Manager — one-command local stack
+#
+# Usage:
+#   docker compose up -d
+#
+# Then open:  http://localhost:3000
+# The manager is pre-configured to talk to Weaviate at http://weaviate:8080
+# (the internal Docker network name). If you'd rather connect to an
+# external / cloud instance, leave the manager out and run it standalone:
+#
+#   docker run -d -p 3000:80 ghcr.io/aicode-world/weaviate-manager:latest
+#
+# and point the UI at your Weaviate URL manually.
+
+services:
+  # -------- Weaviate vector database --------
+  weaviate:
+    image: semitechnologies/weaviate:1.38.3
+    container_name: weaviate
+    restart: unless-stopped
+    ports:
+      - "8080:8080"   # REST / GraphQL
+      - "50051:50051" # gRPC
+    environment:
+      # Enable CORS so the manager (served from another origin) can talk to it
+      CORS_ALLOWED_ORIGINS: "*"
+      # Anonymous access — fine for local dev; turn on auth in production
+      AUTHENTICATION_ANONYMOUS_ACCESS_ENABLED: "true"
+      # Modules — leave empty to run Weaviate as a pure vector store
+      # (vectors generated externally). To enable auto-vectorization:
+      #   - "text2vec-openai"           → requires OPENAI_APIKEY below
+      #   - "multi2vec-clip"            → requires a separate CLIP inference container
+      # See: https://weaviate.io/developers/weaviate/model-providers
+      ENABLE_MODULES: ""
+      # OPENAI_APIKEY: "sk-..."        # ← uncomment if you enable text2vec-openai
+      PERSISTENCE_DATA_PATH: "/var/lib/weaviate"
+      # Disable telemetry for privacy
+      DISABLE_TELEMETRY: "true"
+    volumes:
+      - weaviate_data:/var/lib/weaviate
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/v1/.well-known/ready"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # -------- Weaviate Manager UI --------
+  weaviate-manager:
+    # Build from the Dockerfile in this repo.
+    # The build arg pins the default Weaviate URL to the *internal* compose
+    # network name, so the UI works out of the box on first launch.
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        VITE_DEFAULT_WEAVIATE_URL: http://weaviate:8080
+        VITE_APP_TITLE: Weaviate Manager
+    image: weaviate-manager:local   # tag the locally-built image for reuse
+    container_name: weaviate-manager
+    restart: unless-stopped
+    ports:
+      - "3000:80"
+    depends_on:
+      weaviate:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost/"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  weaviate_data:

@@ -1,0 +1,36 @@
+# Dependencies & build output (rebuilt inside the container)
+node_modules
+dist
+
+# Version control
+.git
+.gitignore
+
+# IDE / editor
+.vscode
+.idea
+*.swp
+*.swo
+
+# OS artifacts
+.DS_Store
+Thumbs.db
+nul
+
+# Docs & CI (not needed in the image)
+docs
+.github
+.workbuddy
+*.md
+!README.md
+LICENSE
+
+# Local env (never leak into the image)
+.env
+.env.*
+!.env.example
+
+# Logs & misc
+*.log
+npm-debug.log*
+screenshot.cjs
