@@ -47,6 +47,8 @@ env:
   GHCR_IMAGE: ghcr.io/${{ github.repository_owner }}/weaviate-manager
   # Docker Hub image name — override via repo variable if different
   DOCKERHUB_IMAGE: ${{ vars.DOCKERHUB_IMAGE || 'weaviate-manager' }}
+  # Computed once so we can use it in `if:` (which cannot read `secrets` directly)
+  DOCKERHUB_ENABLED: ${{ secrets.DOCKERHUB_USERNAME != '' && secrets.DOCKERHUB_TOKEN != '' }}
 
 jobs:
   build:
@@ -84,7 +86,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Log in to Docker Hub
-        if: ${{ secrets.DOCKERHUB_USERNAME != '' && secrets.DOCKERHUB_TOKEN != '' }}
+        if: ${{ env.DOCKERHUB_ENABLED == 'true' }}
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
@@ -101,7 +103,7 @@ jobs:
         with:
           images: |
             ${{ env.GHCR_IMAGE }}
-            ${{ secrets.DOCKERHUB_USERNAME != '' && env.DOCKERHUB_IMAGE || '' }}
+            ${{ env.DOCKERHUB_ENABLED == 'true' && env.DOCKERHUB_IMAGE || '' }}
           tags: |
             # release tags from vX.Y.Z git tags
             type=semver,pattern={{version}}
@@ -142,7 +144,7 @@ jobs:
       # 7. Update Docker Hub description from README (only on tag push)
       # ------------------------------------------------------------------
       - name: Update Docker Hub description
-        if: ${{ startsWith(github.ref, 'refs/tags/v') && secrets.DOCKERHUB_USERNAME != '' }}
+        if: ${{ startsWith(github.ref, 'refs/tags/v') && env.DOCKERHUB_ENABLED == 'true' }}
         uses: peter-evans/dockerhub-description@v4
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
