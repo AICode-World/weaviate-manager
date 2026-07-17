@@ -12,7 +12,7 @@ const ConnectionPage: React.FC = () => {
     clusters, activeClusterId, connectionStatus,
     saveCluster, updateCluster, deleteCluster, disconnect,
     setActiveCluster, setConnection, setCollections,
-    collections, dashboardData, setCurrentCollection,
+    setCurrentCollection,
     serverVersion, latency,
   } = useAppStore();
   const [editing, setEditing] = useState<ClusterConfig | null>(null);
@@ -92,8 +92,6 @@ const ConnectionPage: React.FC = () => {
       // validation failed
     }
   };
-
-  const activeCluster = clusters.find((c) => c.id === activeClusterId);
 
   const getStatusBadge = (cluster: ClusterConfig) => {
     if (cluster.id !== activeClusterId) {
