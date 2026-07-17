@@ -24,6 +24,15 @@ export async function testConnection(client: WeaviateClient): Promise<boolean> {
   }
 }
 
+/** 获取 Weaviate 服务器版本和连接延迟 */
+export async function getServerInfo(client: WeaviateClient): Promise<{ version: string; latency: number }> {
+  const start = performance.now();
+  const meta = await client.misc.metaGetter().do() as Record<string, unknown>;
+  const latency = Math.round(performance.now() - start);
+  const version = (meta?.version as string) || '';
+  return { version, latency };
+}
+
 /** 获取所有集合名称（按字母排序） */
 export async function listCollections(client: WeaviateClient): Promise<string[]> {
   const schema = await client.schema.getter().do();

@@ -116,6 +116,8 @@ interface AppStore {
   client: WeaviateClient | null;
   url: string;
   cred: string;
+  serverVersion: string;
+  latency: number | null;
   collections: string[];
   currentCollection: string | null;
   isRefreshing: boolean;
@@ -146,7 +148,7 @@ interface AppStore {
   // 响应式
   sidebarCollapsed: boolean;
 
-  setConnection: (status: AppStore['connectionStatus'], client: WeaviateClient | null, url?: string, cred?: string) => void;
+  setConnection: (status: AppStore['connectionStatus'], client: WeaviateClient | null, url?: string, cred?: string, serverVersion?: string, latency?: number | null) => void;
   setCollections: (list: string[]) => void;
   setCurrentCollection: (name: string | null) => void;
   refreshCollections: () => Promise<void>;
@@ -186,6 +188,8 @@ const useAppStore = create<AppStore>((set, get) => ({
   client: null,
   url: 'http://localhost:8080',
   cred: '',
+  serverVersion: '',
+  latency: null,
   collections: [],
   currentCollection: null,
   isRefreshing: false,
@@ -218,10 +222,12 @@ const useAppStore = create<AppStore>((set, get) => ({
     return false;
   })(),
 
-  setConnection: (status, client, url, cred) =>
+  setConnection: (status, client, url, cred, serverVersion, latency) =>
     set((s) => ({
       connectionStatus: status, client,
       url: url ?? s.url, cred: cred ?? s.cred,
+      serverVersion: serverVersion ?? (status === 'connected' ? s.serverVersion : ''),
+      latency: latency ?? (status === 'connected' ? s.latency : null),
       collections: status === 'connected' ? s.collections : [],
       currentCollection: status === 'connected' ? s.currentCollection : null,
       currentData: status === 'connected' ? s.currentData : [],
@@ -262,7 +268,7 @@ const useAppStore = create<AppStore>((set, get) => ({
     connectionStatus: 'disconnected', client: null, collections: [], currentCollection: null,
     currentData: [], totalCount: 0, cursors: { after: null, before: null },
     searchQuery: '', searchResults: [], multiModalResults: [], paginationCurrent: 1,
-    dashboardData: null,
+    dashboardData: null, serverVersion: '', latency: null,
   }),
   setPaginationPage: (page) => set({ paginationCurrent: page }),
   setMultiModalResults: (results) => set({ multiModalResults: results }),

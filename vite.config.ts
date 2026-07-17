@@ -55,7 +55,11 @@ export default defineConfig({
               id.includes('node_modules/react-router')) {
             return 'vendor-react';
           }
-          // Ant Design
+          // Ant Design 图标库（体积大，单独拆出）
+          if (id.includes('node_modules/@ant-design/icons')) {
+            return 'vendor-icons';
+          }
+          // Ant Design 组件
           if (id.includes('node_modules/antd') ||
               id.includes('node_modules/@ant-design')) {
             return 'vendor-antd';
@@ -64,18 +68,31 @@ export default defineConfig({
           if (id.includes('node_modules/zustand')) {
             return 'vendor-state';
           }
-          // Monaco Editor 自动分包（React.lazy 触发）
+          // Monaco Editor 本体（懒加载）
           if (id.includes('node_modules/monaco-editor')) {
             return 'vendor-monaco';
+          }
+          // Monaco React 包装（懒加载）
+          if (id.includes('node_modules/@monaco-editor')) {
+            return 'vendor-monaco-react';
+          }
+          // Diff Viewer（懒加载）
+          if (id.includes('node_modules/react-diff-viewer') ||
+              id.includes('node_modules/@emotion')) {
+            return 'vendor-diff';
           }
           // Charts
           if (id.includes('node_modules/@ant-design/charts') ||
               id.includes('node_modules/@antv')) {
             return 'vendor-charts';
           }
+          // Weaviate client
+          if (id.includes('node_modules/weaviate-ts-client')) {
+            return 'vendor-weaviate';
+          }
         },
       },
     },
-    chunkSizeWarningLimit: 1500,
+    chunkSizeWarningLimit: 5000,
   },
 })

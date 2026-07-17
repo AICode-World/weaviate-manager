@@ -23,6 +23,7 @@
     "antd": "^6.5.0",
     "monaco-editor": "^0.55.1",
     "react": "^19.2.7",
+    "react-diff-viewer-continued": "^4.4.0",
     "react-dom": "^19.2.7",
     "react-router-dom": "^7.18.1",
     "weaviate-ts-client": "^2.2.0",

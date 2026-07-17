@@ -7,6 +7,7 @@ export interface QueryRecord {
   id: string;
   type: QueryType;
   query: string;
+  variables?: string;
   collection?: string;
   timestamp: number;
   resultCount?: number;

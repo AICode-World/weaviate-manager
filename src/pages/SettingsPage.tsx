@@ -2,6 +2,7 @@ import { Card, Segmented, Tooltip, Typography, Tag } from 'antd';
 import { SunOutlined, MoonOutlined, DesktopOutlined } from '@ant-design/icons';
 import useAppStore, { THEME_PRESETS } from '../stores/appStore';
 import { useI18n } from '../i18n/I18nProvider';
+import { version } from '../../package.json';
 
 const { Text } = Typography;
 
@@ -82,7 +83,7 @@ const SettingsPage: React.FC = () => {
           <Text type="secondary" style={{ fontSize: 12 }}>{t('appNameLabel')}</Text>
           <Text strong style={{ fontSize: 13 }}>Weaviate Manager</Text>
           <Text type="secondary" style={{ fontSize: 12 }}>{t('versionLabel')}</Text>
-          <Text code style={{ fontSize: 13 }}>0.1.2-beta</Text>
+          <Text code style={{ fontSize: 13 }}>v{version}</Text>
           <Text type="secondary" style={{ fontSize: 12 }}>{t('license')}</Text>
           <Text strong style={{ fontSize: 13 }}>MIT License</Text>
           <Text type="secondary" style={{ fontSize: 12 }}>PWA</Text>

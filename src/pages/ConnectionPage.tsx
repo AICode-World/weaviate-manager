@@ -3,7 +3,7 @@ import { Button, Popconfirm, Form, Input, Modal, App, Empty, Spin } from 'antd';
 import { PlusOutlined, EditOutlined, DeleteOutlined, ApiOutlined, DisconnectOutlined } from '@ant-design/icons';
 import useAppStore, { type ClusterConfig } from '../stores/appStore';
 import { useI18n } from '../i18n/I18nProvider';
-import { createClient, testConnection, listCollections } from '../services/weaviate';
+import { createClient, testConnection, listCollections, getServerInfo } from '../services/weaviate';
 
 const ConnectionPage: React.FC = () => {
   const { t } = useI18n();
@@ -13,6 +13,7 @@ const ConnectionPage: React.FC = () => {
     saveCluster, updateCluster, deleteCluster, disconnect,
     setActiveCluster, setConnection, setCollections,
     collections, dashboardData, setCurrentCollection,
+    serverVersion, latency,
   } = useAppStore();
   const [editing, setEditing] = useState<ClusterConfig | null>(null);
   const [adding, setAdding] = useState(false);
@@ -31,7 +32,15 @@ const ConnectionPage: React.FC = () => {
       const ready = await testConnection(client);
       if (!ready) throw new Error(t('connectionFail'));
       const cols = await listCollections(client);
-      setConnection('connected', client, cluster.url, cluster.apiKey);
+      // Fetch real server version and latency
+      let svVersion = '';
+      let svLatency: number | null = null;
+      try {
+        const info = await getServerInfo(client);
+        svVersion = info.version;
+        svLatency = info.latency;
+      } catch { /* meta already worked in testConnection, ignore */ }
+      setConnection('connected', client, cluster.url, cluster.apiKey, svVersion, svLatency);
       setCollections(cols);
       if (cols.length > 0) setCurrentCollection(cols[0]);
       message.success(t('connectSuccess'));
@@ -137,8 +146,8 @@ const ConnectionPage: React.FC = () => {
                   </div>
                   {getStatusBadge(cluster)}
                   <div className="conn-card-meta">
-                    <div className="conn-card-meta-item">{t('version')}: <strong>{isConnected ? 'v1.24' : '—'}</strong></div>
-                    <div className="conn-card-meta-item">{t('latency')}: <strong>{isConnected ? '12ms' : '—'}</strong></div>
+                    <div className="conn-card-meta-item">{t('version')}: <strong>{isConnected ? (serverVersion ? `v${serverVersion}` : '—') : '—'}</strong></div>
+                    <div className="conn-card-meta-item">{t('latency')}: <strong>{isConnected && latency !== null ? `${latency}ms` : '—'}</strong></div>
                   </div>
                   <div className="conn-card-actions">
                     {isConnected ? (
@@ -171,36 +180,6 @@ const ConnectionPage: React.FC = () => {
           </div>
         )}
 
-        {/* Active Connection Detail */}
-        {activeCluster && connectionStatus === 'connected' && (
-          <div className="glass-card" style={{ padding: 18 }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
-              <div>
-                <div style={{ fontSize: 14, fontWeight: 600 }}>{activeCluster.name} · {t('connectionDetail')}</div>
-                <div style={{ fontSize: 12, color: 'var(--color-text-tertiary)' }}>{t('lastChecked')}: {t('justNow')}</div>
-              </div>
-              <span className="conn-status-badge conn-status-connected"><span className="dot" />{t('running')}</span>
-            </div>
-            <div className="conn-detail-grid">
-              <div className="conn-detail-item">
-                <div className="label">{t('version')}</div>
-                <div className="value">v1.24</div>
-              </div>
-              <div className="conn-detail-item">
-                <div className="label">{t('latency')}</div>
-                <div className="value">12<span style={{ fontSize: 13, color: 'var(--color-text-tertiary)' }}>ms</span></div>
-              </div>
-              <div className="conn-detail-item">
-                <div className="label">{t('collectionCount')}</div>
-                <div className="value">{collections.length}</div>
-              </div>
-              <div className="conn-detail-item">
-                <div className="label">{t('objectTotal')}</div>
-                <div className="value">{dashboardData ? dashboardData.totalObjects.toLocaleString() : '—'}</div>
-              </div>
-            </div>
-          </div>
-        )}
       </div>
 
       {/* Add/Edit Modal */}
