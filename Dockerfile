@@ -15,7 +15,8 @@ ARG VITE_APP_TITLE=Weaviate Manager
 WORKDIR /app
 
 # Install deps first to leverage Docker layer caching
-COPY package.json package-lock.json ./
+# Don't use package-lock.json - let npm install platform-specific native bindings
+COPY package.json ./
 RUN npm install --no-audit --no-fund
 
 # Copy source and build
