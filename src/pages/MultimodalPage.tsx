@@ -1,13 +1,15 @@
 import { Select, Empty, Button } from 'antd';
 import { useNavigate } from 'react-router-dom';
 import MultiModalSearch from '../components/DataView/MultiModalSearch';
-import useAppStore from '../stores/appStore';
+import { useConnectionStore } from '../stores/connectionStore';
+import { useDataStore } from '../stores/dataStore';
 import { useI18n } from '../i18n/I18nProvider';
 
 const MultimodalPage: React.FC = () => {
   const { t } = useI18n();
   const navigate = useNavigate();
-  const { collections, currentCollection, setCurrentCollection, connectionStatus } = useAppStore();
+  const { connectionStatus } = useConnectionStore();
+  const { collections, currentCollection, setCurrentCollection } = useDataStore();
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>

@@ -1,0 +1,33 @@
+# Caddyfile for Weaviate Manager — automatic HTTPS
+#
+# Replace {$DOMAIN} with your domain (or localhost for local testing).
+# {$EMAIL} is used for Let's Encrypt registration (use "internal" for local).
+
+{$DOMAIN} {
+    reverse_proxy weaviate-manager:80
+
+    # Security headers
+    header {
+        Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+        X-Frame-Options "SAMEORIGIN"
+        X-Content-Type-Options "nosniff"
+        Referrer-Policy "strict-origin-when-cross-origin"
+        Permissions-Policy "camera=(), microphone=(), geolocation=()"
+        Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data:; connect-src 'self' https: ws: wss:; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'self'"
+    }
+
+    # Compress responses
+    encode gzip zstd
+
+    # Cache static assets
+    @assets path /assets/*
+    handle @assets {
+        header Cache-Control "public, immutable"
+        reverse_proxy weaviate-manager:80
+    }
+
+    # SPA fallback
+    handle {
+        reverse_proxy weaviate-manager:80
+    }
+}

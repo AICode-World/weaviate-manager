@@ -1,6 +1,6 @@
 import { Input, Switch, Button, Typography } from 'antd';
 import { CloseOutlined } from '@ant-design/icons';
-import useAppStore from '../../stores/appStore';
+import { useDataStore } from '../../stores/dataStore';
 import { useQueryHistoryStore } from '../../stores/queryHistoryStore';
 import { useI18n } from '../../i18n/I18nProvider';
 
@@ -8,7 +8,7 @@ const { Text } = Typography;
 
 const SearchBar: React.FC = () => {
   const { t } = useI18n();
-  const { searchMode, searchQuery, isSearching, setSearchMode, setSearchQuery, clearSearch, currentCollection } = useAppStore();
+  const { searchMode, searchQuery, isSearching, setSearchMode, setSearchQuery, clearSearch, currentCollection } = useDataStore();
   const addQuery = useQueryHistoryStore((s) => s.addQuery);
 
   const handleSearch = () => {

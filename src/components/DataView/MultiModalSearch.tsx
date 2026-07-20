@@ -1,9 +1,11 @@
 import { useState } from 'react';
 import { Radio, Input, Button, Upload, Spin, Card, Modal, Typography, Space, Row, Col, App } from 'antd';
 import { SearchOutlined, UploadOutlined } from '@ant-design/icons';
-import useAppStore from '../../stores/appStore';
+import { useConnectionStore } from '../../stores/connectionStore';
+import { useDataStore } from '../../stores/dataStore';
 import { useQueryHistoryStore } from '../../stores/queryHistoryStore';
-import { searchNearTextWithVector, searchNearImage } from '../../services/weaviate';
+import { searchNearTextWithVector, searchNearImage } from '../../services';
+import { fileToBase64, isBase64Image, toDataUri } from '../../utils/media';
 import { useI18n } from '../../i18n/I18nProvider';
 
 const { TextArea } = Input;
@@ -11,11 +13,12 @@ const { Text } = Typography;
 
 /** 多模态搜索组件：文字→图片 / 图片→图片 */
 const MultiModalSearch: React.FC = () => {
+  const { client } = useConnectionStore();
   const {
-    client, currentCollection,
+    currentCollection,
     multiModalResults, isMultiModalSearching,
     setMultiModalResults, setMultiModalSearching,
-  } = useAppStore();
+  } = useDataStore();
   const { t } = useI18n();
   const { message } = App.useApp();
   const addQuery = useQueryHistoryStore((s) => s.addQuery);
@@ -58,34 +61,11 @@ const MultiModalSearch: React.FC = () => {
     }
   };
 
-  const fileToBase64 = (file: File): Promise<string> =>
-    new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(reader.result as string);
-      reader.onerror = reject;
-      reader.readAsDataURL(file);
-    });
-
-  /** 判断值是否为 Base64 图片（支持裸 base64 和 data URI） */
-  const isImage = (v: unknown): v is string => {
-    if (typeof v !== 'string') return false;
-    if (v.startsWith('data:image/')) return true;
-    // 裸 base64 按文件头识别
-    return v.startsWith('/9j/') || v.startsWith('iVBOR') || v.startsWith('R0lGOD') || v.startsWith('UklGR');
-  };
-
   /** 查找结果中的图片字段，返回 data URI */
   const findImageField = (item: Record<string, unknown>): string | null => {
     for (const v of Object.values(item)) {
-      if (isImage(v)) {
-        const raw = v as string;
-        if (raw.startsWith('data:')) return raw;
-        // 裸 base64 补前缀
-        const mime = raw.startsWith('/9j/') ? 'image/jpeg'
-          : raw.startsWith('iVBOR') ? 'image/png'
-          : raw.startsWith('R0lGOD') ? 'image/gif'
-          : 'image/jpeg';
-        return `data:${mime};base64,${raw}`;
+      if (isBase64Image(v)) {
+        return toDataUri(v);
       }
     }
     return null;
@@ -230,8 +210,8 @@ const MultiModalSearch: React.FC = () => {
               .map(([key, value]) => (
                 <div key={key} style={{ marginBottom: 8 }}>
                   <Text strong>{key}: </Text>
-                  {isImage(value) ? (
-                    <img src={findImageField({ [key]: value }) ?? (value as string)} alt={key} style={{ maxWidth: 300, maxHeight: 200 }} />
+                  {isBase64Image(value) ? (
+                    <img src={toDataUri(value)} alt={key} style={{ maxWidth: 300, maxHeight: 200 }} />
                   ) : (
                     <Text>{String(value)}</Text>
                   )}

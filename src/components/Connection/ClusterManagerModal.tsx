@@ -1,9 +1,12 @@
 import { useState } from 'react';
 import { Modal, Table, Button, Tag, Popconfirm, Form, Input, Space, Tooltip, App } from 'antd';
 import { EditOutlined, DeleteOutlined, PlusOutlined, ApiOutlined, DisconnectOutlined } from '@ant-design/icons';
-import useAppStore, { type ClusterConfig } from '../../stores/appStore';
+import { useConnectionStore } from '../../stores/connectionStore';
+import { useClusterStore, type ClusterConfig } from '../../stores/clusterStore';
+import { useDataStore } from '../../stores/dataStore';
+import { useBridgeActions } from '../../hooks/useBridgeActions';
 import { useI18n } from '../../i18n/I18nProvider';
-import { createClient, testConnection, listCollections } from '../../services/weaviate';
+import { createClient, testConnection, listCollections } from '../../services';
 
 interface Props {
   open: boolean;
@@ -13,11 +16,10 @@ interface Props {
 const ClusterManagerModal: React.FC<Props> = ({ open, onClose }) => {
   const { t } = useI18n();
   const { message } = App.useApp();
-  const {
-    clusters, activeClusterId, connectionStatus,
-    saveCluster, updateCluster, deleteCluster, disconnect,
-    setActiveCluster, setConnection, setCollections,
-  } = useAppStore();
+  const { connectionStatus } = useConnectionStore();
+  const { clusters, activeClusterId, saveCluster, updateCluster, setActiveCluster } = useClusterStore();
+  const { setCollections } = useDataStore();
+  const { setConnection, disconnect, deleteCluster } = useBridgeActions();
   const [editing, setEditing] = useState<ClusterConfig | null>(null);
   const [adding, setAdding] = useState(false);
   const [form] = Form.useForm();

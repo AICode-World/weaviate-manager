@@ -1,14 +1,15 @@
+/* eslint-disable react-refresh/only-export-components -- this module intentionally exports context, hook, and provider */
 import React, { createContext, useContext, useState, useMemo } from 'react';
 import type { Lang } from './locales';
 import { t as translate } from './locales';
 
-interface I18nContextType {
+export interface I18nContextType {
   lang: Lang;
   setLang: (l: Lang) => void;
   t: (key: string, params?: Record<string, string | number>) => string;
 }
 
-const I18nContext = createContext<I18nContextType>({
+export const I18nContext = createContext<I18nContextType>({
   lang: 'en',
   setLang: () => {},
   t: (key) => key,

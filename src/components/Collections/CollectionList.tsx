@@ -1,7 +1,9 @@
 import { Menu, Button, Typography } from 'antd';
 import { ReloadOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
-import useAppStore from '../../stores/appStore';
+import { useConnectionStore } from '../../stores/connectionStore';
+import { useDataStore } from '../../stores/dataStore';
+import { useBridgeActions } from '../../hooks/useBridgeActions';
 import { useI18n } from '../../i18n/I18nProvider';
 
 const { Text } = Typography;
@@ -9,7 +11,9 @@ const { Text } = Typography;
 const CollectionList: React.FC = () => {
   const { t } = useI18n();
   const navigate = useNavigate();
-  const { collections, currentCollection, isRefreshing, setCurrentCollection, refreshCollections, connectionStatus } = useAppStore();
+  const { connectionStatus } = useConnectionStore();
+  const { collections, currentCollection, isRefreshing, setCurrentCollection } = useDataStore();
+  const { refreshCollections } = useBridgeActions();
   if (connectionStatus !== 'connected') return null;
 
   return (

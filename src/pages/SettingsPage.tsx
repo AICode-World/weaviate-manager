@@ -1,14 +1,23 @@
-import { Card, Segmented, Tooltip, Typography, Tag } from 'antd';
-import { SunOutlined, MoonOutlined, DesktopOutlined } from '@ant-design/icons';
-import useAppStore, { THEME_PRESETS } from '../stores/appStore';
+import { useState } from 'react';
+import { Card, Segmented, Tooltip, Typography, Tag, Button, Modal, Input, App, Space } from 'antd';
+import { SunOutlined, MoonOutlined, DesktopOutlined, LockOutlined, UnlockOutlined } from '@ant-design/icons';
+import { useThemeStore, THEME_PRESETS } from '../stores/themeStore';
+import { useClusterStore } from '../stores/clusterStore';
 import { useI18n } from '../i18n/I18nProvider';
 import { version } from '../../package.json';
+import { unlockMasterKey, lockMasterKey, isUnlocked } from '../utils/crypto';
 
 const { Text } = Typography;
 
 const SettingsPage: React.FC = () => {
   const { t, lang, setLang } = useI18n();
-  const { themeMode, setThemeMode, themeColor, setThemeColor } = useAppStore();
+  const { themeMode, setThemeMode, themeColor, setThemeColor } = useThemeStore();
+  const { reEncryptApiKeys } = useClusterStore();
+  const { message } = App.useApp();
+
+  const [masterPasswordOpen, setMasterPasswordOpen] = useState(false);
+  const [newPassword, setNewPassword] = useState('');
+  const [unlocked, setUnlocked] = useState(isUnlocked());
 
   const themeModeOptions = [
     { label: <span><SunOutlined /> {t('lightMode')}</span>, value: 'light' },
@@ -20,6 +29,29 @@ const SettingsPage: React.FC = () => {
     { label: t('langLabelZh'), value: 'zh' },
     { label: t('langLabelEn'), value: 'en' },
   ];
+
+  const handleSetMasterPassword = async () => {
+    if (!newPassword.trim()) {
+      message.warning(t('masterPasswordRequired'));
+      return;
+    }
+    try {
+      await unlockMasterKey(newPassword);
+      await reEncryptApiKeys();
+      setUnlocked(true);
+      message.success(t('masterPasswordSet'));
+      setNewPassword('');
+      setMasterPasswordOpen(false);
+    } catch {
+      message.error(t('masterPasswordWrong'));
+    }
+  };
+
+  const handleLock = () => {
+    lockMasterKey();
+    setUnlocked(false);
+    message.success(t('masterPasswordLocked'));
+  };
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16, maxWidth: 640 }}>
@@ -66,6 +98,33 @@ const SettingsPage: React.FC = () => {
         </div>
       </Card>
 
+      {/* Security */}
+      <Card className="glass-card" title={<span><LockOutlined style={{ marginRight: 6 }} />{t('setMasterPassword')}</span>} size="small">
+        <div className="settings-row">
+          <div>
+            <div className="settings-label">{t('setMasterPassword')}</div>
+            <div className="settings-desc">{t('setMasterPasswordDesc')}</div>
+            <div className="settings-desc" style={{ color: 'var(--color-text-quaternary)', marginTop: 4 }}>
+              {t('setMasterPasswordHint')}
+            </div>
+          </div>
+          <Space direction="vertical" align="end" size={8}>
+            <Tag color={unlocked ? 'green' : 'default'}>
+              {unlocked ? t('masterPasswordSetStatus') : t('masterPasswordNotSet')}
+            </Tag>
+            {unlocked ? (
+              <Button size="small" icon={<LockOutlined />} onClick={handleLock}>
+                {t('lockMasterPassword')}
+              </Button>
+            ) : (
+              <Button type="primary" size="small" icon={<UnlockOutlined />} onClick={() => setMasterPasswordOpen(true)}>
+                {t('setMasterPassword')}
+              </Button>
+            )}
+          </Space>
+        </div>
+      </Card>
+
       {/* Language */}
       <Card className="glass-card" title={t('languageSection')} size="small">
         <div className="settings-row">
@@ -90,6 +149,29 @@ const SettingsPage: React.FC = () => {
           <Tag color="green">{t('enabled')}</Tag>
         </div>
       </Card>
+
+      {/* Master Password Modal */}
+      <Modal
+        open={masterPasswordOpen}
+        title={<span><LockOutlined style={{ marginRight: 6 }} />{t('setMasterPassword')}</span>}
+        onCancel={() => { setMasterPasswordOpen(false); setNewPassword(''); }}
+        onOk={handleSetMasterPassword}
+        okText={t('confirm')}
+        cancelText={t('cancel')}
+        width={420}
+      >
+        <div style={{ marginBottom: 12, color: 'var(--color-text-tertiary)', fontSize: 13 }}>
+          {t('setMasterPasswordHint')}
+        </div>
+        <Input.Password
+          placeholder={t('masterPasswordPlaceholder')}
+          value={newPassword}
+          onChange={(e) => setNewPassword(e.target.value)}
+          onPressEnter={handleSetMasterPassword}
+          autoFocus
+          size="large"
+        />
+      </Modal>
     </div>
   );
 };

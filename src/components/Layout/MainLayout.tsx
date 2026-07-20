@@ -7,10 +7,15 @@ import {
   MenuFoldOutlined, MenuUnfoldOutlined,
 } from '@ant-design/icons';
 import { Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
-import useAppStore from '../../stores/appStore';
+import { useConnectionStore } from '../../stores/connectionStore';
+import { useClusterStore } from '../../stores/clusterStore';
+import { useDataStore } from '../../stores/dataStore';
+import { useThemeStore } from '../../stores/themeStore';
+import { useBridgeActions } from '../../hooks/useBridgeActions';
 import { useI18n } from '../../i18n/I18nProvider';
-import { createClient, testConnection, listCollections } from '../../services/weaviate';
+import { createClient, testConnection, listCollections } from '../../services';
 import AppTour from '../Onboarding/AppTour';
+import MasterPasswordModal from '../Common/MasterPasswordModal';
 
 const Dashboard = lazy(() => import('../../pages/Dashboard'));
 const DataPage = lazy(() => import('../../pages/DataPage'));
@@ -38,17 +43,17 @@ const MainLayout: React.FC = () => {
   const { message } = App.useApp();
   const location = useLocation();
   const navigate = useNavigate();
-  const {
-    connectionStatus, loadClusters, clusters, activeClusterId,
-    sidebarCollapsed, setSidebarCollapsed,
-    saveCluster, setActiveCluster, setConnection, setCollections,
-    setCurrentCollection,
-  } = useAppStore();
+  const { connectionStatus } = useConnectionStore();
+  const { loadClusters, clusters, activeClusterId, saveCluster, setActiveCluster, needsMasterPassword } = useClusterStore();
+  const { setCollections, setCurrentCollection } = useDataStore();
+  const { sidebarCollapsed, setSidebarCollapsed } = useThemeStore();
+  const { setConnection } = useBridgeActions();
 
   // 首次进入引导
   const [onboardingOpen, setOnboardingOpen] = useState(false);
   const [onboardingLoading, setOnboardingLoading] = useState(false);
   const [onboardingForm] = Form.useForm();
+  const [masterPasswordOpen, setMasterPasswordOpen] = useState(false);
 
   // Tour refs
   const connectionRef = useRef<HTMLDivElement>(null);
@@ -61,6 +66,7 @@ const MainLayout: React.FC = () => {
     if (!done && connectionStatus !== 'connected') {
       setOnboardingOpen(true);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 仅首次挂载检查，不随 connectionStatus 变化重跑
   }, []);
 
   const handleOnboardingConnect = async () => {
@@ -102,6 +108,11 @@ const MainLayout: React.FC = () => {
   }, [setSidebarCollapsed]);
 
   useEffect(() => { loadClusters(); }, [loadClusters]);
+
+  // 主密码解锁弹窗
+  useEffect(() => {
+    if (needsMasterPassword) setMasterPasswordOpen(true);
+  }, [needsMasterPassword]);
 
   const currentPath = location.pathname;
   const siderWidth = sidebarCollapsed ? 68 : 240;
@@ -338,6 +349,9 @@ const MainLayout: React.FC = () => {
       {connectionStatus === 'connected' && (
         <AppTour refs={{ connection: connectionRef, collections: collectionsRef, dashboardBtn: dashboardBtnRef, dataBtn: dataBtnRef }} />
       )}
+
+      {/* 主密码解锁弹窗 */}
+      <MasterPasswordModal open={masterPasswordOpen} onClose={() => setMasterPasswordOpen(false)} />
     </Layout>
   );
 };

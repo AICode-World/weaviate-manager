@@ -1,0 +1,65 @@
+# Weaviate + Weaviate Manager — HTTPS deployment with Caddy
+#
+# Caddy provides automatic HTTPS (Let's Encrypt) out of the box.
+# Just set your domain and email, then:
+#
+#   DOMAIN=manager.example.com EMAIL=you@example.com docker compose -f docker-compose-https.yml up -d
+#
+# Caddy will automatically obtain and renew certificates.
+# For local testing with self-signed certs, set DOMAIN=localhost.
+
+services:
+  weaviate:
+    image: semitechnologies/weaviate:1.38.3
+    container_name: weaviate
+    restart: unless-stopped
+    environment:
+      CORS_ALLOWED_ORIGINS: "*"
+      AUTHENTICATION_ANONYMOUS_ACCESS_ENABLED: "true"
+      ENABLE_MODULES: ""
+      PERSISTENCE_DATA_PATH: "/var/lib/weaviate"
+      DISABLE_TELEMETRY: "true"
+    volumes:
+      - weaviate_data:/var/lib/weaviate
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/v1/.well-known/ready"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  weaviate-manager:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        VITE_DEFAULT_WEAVIATE_URL: http://weaviate:8080
+        VITE_APP_TITLE: Weaviate Manager
+    image: weaviate-manager:local
+    container_name: weaviate-manager
+    restart: unless-stopped
+    depends_on:
+      weaviate:
+        condition: service_healthy
+
+  caddy:
+    image: caddy:2-alpine
+    container_name: caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    environment:
+      DOMAIN: ${DOMAIN:-localhost}
+      EMAIL: ${EMAIL:-internal}
+    depends_on:
+      - weaviate-manager
+
+volumes:
+  weaviate_data:
+  caddy_data:
+  caddy_config:

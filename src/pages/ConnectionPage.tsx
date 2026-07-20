@@ -1,20 +1,20 @@
 import { useState } from 'react';
 import { Button, Popconfirm, Form, Input, Modal, App, Empty, Spin } from 'antd';
 import { PlusOutlined, EditOutlined, DeleteOutlined, ApiOutlined, DisconnectOutlined } from '@ant-design/icons';
-import useAppStore, { type ClusterConfig } from '../stores/appStore';
+import { useConnectionStore } from '../stores/connectionStore';
+import { useClusterStore, type ClusterConfig } from '../stores/clusterStore';
+import { useDataStore } from '../stores/dataStore';
+import { useBridgeActions } from '../hooks/useBridgeActions';
 import { useI18n } from '../i18n/I18nProvider';
-import { createClient, testConnection, listCollections, getServerInfo } from '../services/weaviate';
+import { createClient, testConnection, listCollections, getServerInfo } from '../services';
 
 const ConnectionPage: React.FC = () => {
   const { t } = useI18n();
   const { message } = App.useApp();
-  const {
-    clusters, activeClusterId, connectionStatus,
-    saveCluster, updateCluster, deleteCluster, disconnect,
-    setActiveCluster, setConnection, setCollections,
-    setCurrentCollection,
-    serverVersion, latency,
-  } = useAppStore();
+  const { connectionStatus, serverVersion, latency } = useConnectionStore();
+  const { clusters, activeClusterId, saveCluster, updateCluster, setActiveCluster } = useClusterStore();
+  const { setCollections, setCurrentCollection } = useDataStore();
+  const { setConnection, disconnect, deleteCluster } = useBridgeActions();
   const [editing, setEditing] = useState<ClusterConfig | null>(null);
   const [adding, setAdding] = useState(false);
   const [form] = Form.useForm();

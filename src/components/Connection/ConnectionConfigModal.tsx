@@ -1,9 +1,12 @@
 import { useEffect, useState } from 'react';
 import { Modal, Input, Button, Select, Space, Typography, Tag, Divider, Popconfirm, App } from 'antd';
 import { ApiOutlined, SaveOutlined, DeleteOutlined, DisconnectOutlined } from '@ant-design/icons';
-import useAppStore from '../../stores/appStore';
+import { useConnectionStore } from '../../stores/connectionStore';
+import { useClusterStore } from '../../stores/clusterStore';
+import { useDataStore } from '../../stores/dataStore';
+import { useBridgeActions } from '../../hooks/useBridgeActions';
 import { useI18n } from '../../i18n/I18nProvider';
-import { createClient, testConnection, listCollections } from '../../services/weaviate';
+import { createClient, testConnection, listCollections } from '../../services';
 import ClusterManagerModal from './ClusterManagerModal';
 
 const { Text } = Typography;
@@ -16,33 +19,35 @@ interface ConnectionConfigModalProps {
 const ConnectionConfigModal: React.FC<ConnectionConfigModalProps> = ({ open, onClose }) => {
   const { t } = useI18n();
   const { message } = App.useApp();
-  const store = useAppStore();
+  const { url, cred, connectionStatus } = useConnectionStore();
+  const { clusters, activeClusterId, saveCluster, setActiveCluster } = useClusterStore();
+  const { setCollections, collections } = useDataStore();
+  const { setConnection, disconnect, deleteCluster } = useBridgeActions();
 
-  const [localUrl, setLocalUrl] = useState(store.url);
-  const [localCred, setLocalCred] = useState(store.cred);
+  const [localUrl, setLocalUrl] = useState(url);
+  const [localCred, setLocalCred] = useState(cred);
   const [loading, setLoading] = useState(false);
   const [clusterModalOpen, setClusterModalOpen] = useState(false);
 
-  // 同步 store 状态到本地
   useEffect(() => {
     if (open) {
-      setLocalUrl(store.url);
-      setLocalCred(store.cred);
+      setLocalUrl(url);
+      setLocalCred(cred);
     }
-  }, [open, store.url, store.cred]);
+  }, [open, url, cred]);
 
-  const doConnect = async (url: string, cred: string): Promise<boolean> => {
+  const doConnect = async (urlVal: string, credVal: string): Promise<boolean> => {
     setLoading(true);
     try {
-      const client = createClient(url.trim(), cred.trim());
+      const client = createClient(urlVal.trim(), credVal.trim());
       const ready = await testConnection(client);
       if (!ready) throw new Error(t('connectionFail'));
       const cols = await listCollections(client);
-      store.setConnection('connected', client, url, cred);
-      store.setCollections(cols);
+      setConnection('connected', client, urlVal, credVal);
+      setCollections(cols);
       return true;
     } catch (e) {
-      store.setConnection('error', null);
+      setConnection('error', null);
       message.error(e instanceof Error ? e.message : t('connectionFail'));
       return false;
     } finally {
@@ -60,7 +65,7 @@ const ConnectionConfigModal: React.FC<ConnectionConfigModalProps> = ({ open, onC
   };
 
   const handleDisconnect = () => {
-    store.disconnect();
+    disconnect();
   };
 
   const handleClusterChange = (value: string) => {
@@ -68,9 +73,9 @@ const ConnectionConfigModal: React.FC<ConnectionConfigModalProps> = ({ open, onC
       setClusterModalOpen(true);
       return;
     }
-    const cluster = store.clusters.find((c) => c.id === value);
+    const cluster = clusters.find((c) => c.id === value);
     if (!cluster) return;
-    store.setActiveCluster(cluster.id);
+    setActiveCluster(cluster.id);
     setLocalUrl(cluster.url);
     setLocalCred(cluster.apiKey);
     if (cluster.url.trim()) doConnect(cluster.url, cluster.apiKey);
@@ -79,19 +84,19 @@ const ConnectionConfigModal: React.FC<ConnectionConfigModalProps> = ({ open, onC
   const handleSaveAsNew = () => {
     const name = prompt(t('clusterName'));
     if (!name?.trim()) return;
-    const newId = store.saveCluster({
+    const newId = saveCluster({
       name: name.trim(),
       url: localUrl,
       apiKey: localCred,
-      isDefault: store.clusters.length === 0,
+      isDefault: clusters.length === 0,
     });
-    store.setActiveCluster(newId);
+    setActiveCluster(newId);
     message.success(t('clusterSaveSuccess'));
   };
 
   const handleDeleteCluster = () => {
-    if (!store.activeClusterId) return;
-    store.deleteCluster(store.activeClusterId);
+    if (!activeClusterId) return;
+    deleteCluster(activeClusterId);
     setLocalUrl('http://localhost:8080');
     setLocalCred('');
     message.success(t('clusterDeleted'));
@@ -101,7 +106,7 @@ const ConnectionConfigModal: React.FC<ConnectionConfigModalProps> = ({ open, onC
     disconnected: <Tag>{t('disconnected')}</Tag>,
     connected: <Tag color="success">{t('connected')}</Tag>,
     error: <Tag color="error">{t('failed')}</Tag>,
-  }[store.connectionStatus];
+  }[connectionStatus];
 
   return (
     <>
@@ -113,19 +118,18 @@ const ConnectionConfigModal: React.FC<ConnectionConfigModalProps> = ({ open, onC
         width={520}
       >
         <Space direction="vertical" size="middle" style={{ width: '100%' }}>
-          {/* 集群选择器 */}
-          {store.clusters.length > 0 && (
+          {clusters.length > 0 && (
             <div>
               <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 4 }}>
                 {t('clusters')}
               </Text>
               <Select
-                value={store.activeClusterId ?? undefined}
+                value={activeClusterId ?? undefined}
                 onChange={handleClusterChange}
                 placeholder={t('selectCluster')}
                 style={{ width: '100%' }}
                 options={[
-                  ...store.clusters.map((c) => ({
+                  ...clusters.map((c) => ({
                     label: `${c.name} (${c.url})`,
                     value: c.id,
                   })),
@@ -135,7 +139,6 @@ const ConnectionConfigModal: React.FC<ConnectionConfigModalProps> = ({ open, onC
             </div>
           )}
 
-          {/* 连接信息 */}
           <div>
             <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 4 }}>
               {t('serviceAddr')}
@@ -144,7 +147,7 @@ const ConnectionConfigModal: React.FC<ConnectionConfigModalProps> = ({ open, onC
               placeholder="http://localhost:8080"
               value={localUrl}
               onChange={(e) => setLocalUrl(e.target.value)}
-              disabled={store.connectionStatus === 'connected'}
+              disabled={connectionStatus === 'connected'}
             />
           </div>
 
@@ -156,26 +159,24 @@ const ConnectionConfigModal: React.FC<ConnectionConfigModalProps> = ({ open, onC
               placeholder={t('apiKey')}
               value={localCred}
               onChange={(e) => setLocalCred(e.target.value)}
-              disabled={store.connectionStatus === 'connected'}
+              disabled={connectionStatus === 'connected'}
             />
           </div>
 
-          {/* 状态显示 */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <Text type="secondary" style={{ fontSize: 12 }}>{t('status')}:</Text>
             {statusTag}
-            {store.connectionStatus === 'connected' && (
+            {connectionStatus === 'connected' && (
               <Text type="secondary" style={{ fontSize: 12 }}>
-                · {store.collections.length} {t('collections')}
+                · {collections.length} {t('collections')}
               </Text>
             )}
           </div>
 
           <Divider style={{ margin: '8px 0' }} />
 
-          {/* 操作按钮 */}
           <Space wrap>
-            {store.connectionStatus === 'connected' ? (
+            {connectionStatus === 'connected' ? (
               <Button icon={<DisconnectOutlined />} onClick={handleDisconnect}>
                 {t('disconnect')}
               </Button>
@@ -194,7 +195,7 @@ const ConnectionConfigModal: React.FC<ConnectionConfigModalProps> = ({ open, onC
               {t('saveAsNewCluster')}
             </Button>
 
-            {store.activeClusterId && (
+            {activeClusterId && (
               <Popconfirm
                 title={t('deleteClusterConfirm')}
                 onConfirm={handleDeleteCluster}

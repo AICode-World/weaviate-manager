@@ -4,6 +4,10 @@
 export interface AppError {
   code: string;
   message: string;
+  /** i18n key，如果设置则组件应优先用 t(message) 翻译 */
+  i18nKey?: string;
+  /** i18n 参数 */
+  i18nParams?: Record<string, string | number>;
   detail?: string;
   timestamp: number;
 }
@@ -25,23 +29,27 @@ export function wrapError(error: unknown, context: string): AppError {
   };
 }
 
-/** 根据 HTTP 状态码创建错误 */
+/** 根据 HTTP 状态码创建错误（返回 i18n key，组件用 t() 翻译） */
 export function httpError(status: number, body?: unknown, context?: string): AppError {
   const detail = typeof body === 'object' ? JSON.stringify(body) : undefined;
-  const prefix = context ? `[${context}] ` : '';
-  const messages: Record<number, string> = {
-    400: `${prefix}请求参数错误 (400)`,
-    401: `${prefix}认证失败，请检查 API Key (401)`,
-    403: `${prefix}无权限访问 (403)`,
-    404: `${prefix}资源不存在 (404)`,
-    429: `${prefix}请求过于频繁，请稍后重试 (429)`,
-    500: `${prefix}服务器内部错误 (500)`,
-    502: `${prefix}网关错误 (502)`,
-    503: `${prefix}服务暂时不可用 (503)`,
+  const i18nKey = `error.http.${status}`;
+  const i18nParams = { status, context: context ?? '' };
+  // fallback message (for non-i18n contexts like console)
+  const fallbackMessages: Record<number, string> = {
+    400: `Bad request (${status})`,
+    401: `Authentication failed (${status})`,
+    403: `Forbidden (${status})`,
+    404: `Not found (${status})`,
+    429: `Too many requests (${status})`,
+    500: `Internal server error (${status})`,
+    502: `Bad gateway (${status})`,
+    503: `Service unavailable (${status})`,
   };
   return {
     code: `HTTP_${status}`,
-    message: messages[status] ?? `${prefix}请求失败 (${status})`,
+    message: fallbackMessages[status] ?? `Request failed (${status})`,
+    i18nKey,
+    i18nParams,
     detail,
     timestamp: Date.now(),
   };
@@ -57,9 +65,35 @@ export function reportError(error: AppError): void {
   // });
 }
 
-/** toast 友好的错误消息提取 */
-export function userFriendlyMessage(error: unknown): string {
+/**
+ * toast 友好的错误消息提取
+ * @param error 任意错误
+ * @param t 可选的 i18n 翻译函数，传入则尝试翻译 i18nKey
+ */
+export function userFriendlyMessage(error: unknown, t?: (key: string, params?: Record<string, string | number>) => string): string {
+  if (error instanceof AppErrorImpl) {
+    if (error.i18nKey && t) return t(error.i18nKey, error.i18nParams);
+    return error.message;
+  }
   if (error instanceof Error) return error.message;
   if (typeof error === 'string') return error;
-  return '操作失败，请稍后重试';
+  return t ? t('error.default') : 'Operation failed';
+}
+
+/** 内部类用于 instanceof 检测 */
+class AppErrorImpl extends Error implements AppError {
+  code: string;
+  i18nKey?: string;
+  i18nParams?: Record<string, string | number>;
+  detail?: string;
+  timestamp: number;
+
+  constructor(appError: AppError) {
+    super(appError.message);
+    this.code = appError.code;
+    this.i18nKey = appError.i18nKey;
+    this.i18nParams = appError.i18nParams;
+    this.detail = appError.detail;
+    this.timestamp = appError.timestamp;
+  }
 }

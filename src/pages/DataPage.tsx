@@ -3,7 +3,8 @@ import { Select } from 'antd';
 import SearchBar from '../components/DataView/SearchBar';
 import DataTable from '../components/DataView/DataTable';
 import DataManagement, { type DataManagementHandle } from '../components/DataView/DataManagement';
-import useAppStore from '../stores/appStore';
+import { useConnectionStore } from '../stores/connectionStore';
+import { useDataStore } from '../stores/dataStore';
 import { useI18n } from '../i18n/I18nProvider';
 
 const DataPage: React.FC = () => {
@@ -14,7 +15,8 @@ const DataPage: React.FC = () => {
   const dmRef = useRef<DataManagementHandle>(null);
   const handleEdit = useCallback((r: Record<string, unknown>) => dmRef.current?.openEdit(r), []);
   const handleDelete = useCallback((id: string) => dmRef.current?.handleDelete(id), []);
-  const { currentCollection, collections, setCurrentCollection, connectionStatus, totalCount } = useAppStore();
+  const { connectionStatus } = useConnectionStore();
+  const { currentCollection, collections, setCurrentCollection, totalCount } = useDataStore();
 
   // 自动选中第一个集合
   useEffect(() => {

@@ -1,4 +1,4 @@
-import { useState, useEffect, forwardRef, useImperativeHandle } from 'react';
+import { useState, useEffect, useCallback, useRef, forwardRef, useImperativeHandle } from 'react';
 import {
   Button, Modal, Form, Input, InputNumber, Upload, Popconfirm,
   Space, Progress, Select, DatePicker, Alert, App, Radio, Checkbox, Switch, Typography,
@@ -9,11 +9,13 @@ import {
 } from '@ant-design/icons';
 import type { UploadFile } from 'antd';
 import dayjs from 'dayjs';
-import useAppStore from '../../stores/appStore';
+import { useConnectionStore } from '../../stores/connectionStore';
+import { useDataStore } from '../../stores/dataStore';
 import {
   insertObject, updateObject, deleteObject,
   getClassProperties, fetchObjects,
-} from '../../services/weaviate';
+} from '../../services';
+import { toDataUri, stripDataUri, fileToBase64 } from '../../utils/media';
 import { useI18n } from '../../i18n/I18nProvider';
 
 /** 字段类型描述 */
@@ -29,7 +31,7 @@ interface FieldDef {
 /** 常见字段的建议值 */
 const FIELD_SUGGESTIONS: Record<string, string[]> = {
   source_type: ['text', 'image', 'screenshot', 'video_frame', 'audio_transcript', 'video_transcript'],
-  embed_model: ['text-embedding-v4', 'text-embedding-3-small', 'text-embedding-3-large', 'text-embedding-ada-002', 'bge-large-zh-v1.5', 'bge-m3'],
+  embed_model: ['text-embedding-v4', 'text-embedding-3-small', 'text-embedding-3-large', 'bge-large-zh-v1.5', 'bge-large-en-v1.5'],
   file_id: [],
   section: [],
 };
@@ -39,24 +41,6 @@ export interface DataManagementHandle {
   openEdit: (record: Record<string, unknown>) => void;
   handleDelete: (id: string) => void;
   handleExportSelected: () => void;
-}
-
-/** 检测 base64 图片类型并补全 data URI 前缀 */
-function ensureDataUri(raw: string): string {
-  if (raw.startsWith('data:')) return raw;
-  const mime = raw.startsWith('/9j/') ? 'image/jpeg'
-    : raw.startsWith('iVBORw0KGgo') ? 'image/png'
-    : raw.startsWith('R0lGOD') ? 'image/gif'
-    : raw.startsWith('UklGR') ? 'image/webp'
-    : 'image/jpeg';
-  return `data:${mime};base64,${raw}`;
-}
-
-/** 去掉 data URI 前缀，还原裸 base64（供 Weaviate API 存储用） */
-function stripDataUri(uri: string): string {
-  if (!uri.startsWith('data:')) return uri;
-  const idx = uri.indexOf(';base64,');
-  return idx >= 0 ? uri.slice(idx + 8) : uri;
 }
 
 /** 通用描述字段名（换图时需要提醒同步更新） */
@@ -76,7 +60,8 @@ const DataManagement = forwardRef<DataManagementHandle, {
   onSelectionChange: (keys: string[]) => void;
   onRefresh: () => void;
 }>(({ selectedRowKeys, onSelectionChange, onRefresh }, ref) => {
-  const { client, currentCollection, url: storeUrl } = useAppStore();
+  const { client, url: storeUrl, cred } = useConnectionStore();
+  const { currentCollection } = useDataStore();
   const { t } = useI18n();
   const { message } = App.useApp();
 
@@ -119,7 +104,7 @@ const DataManagement = forwardRef<DataManagementHandle, {
   });
 
   /** 加载集合属性 */
-  const loadFields = async () => {
+  const loadFields = useCallback(async () => {
     if (!client || !currentCollection) return;
     try {
       const props = await getClassProperties(client, currentCollection);
@@ -134,11 +119,11 @@ const DataManagement = forwardRef<DataManagementHandle, {
     } catch {
       // ignore
     }
-  };
+  }, [client, currentCollection]);
 
   useEffect(() => {
     if (currentCollection) loadFields();
-  }, [currentCollection]);
+  }, [currentCollection, loadFields]);
 
   /** 打开新增弹窗 */
   const openCreate = () => {
@@ -156,7 +141,7 @@ const DataManagement = forwardRef<DataManagementHandle, {
     fields.forEach((f) => {
       if (f.isBlob && typeof record[f.name] === 'string') {
         blobs[f.name] = record[f.name] as string;
-        const uri = ensureDataUri(record[f.name] as string);
+        const uri = toDataUri(record[f.name] as string);
         values[f.name] = [{
           uid: '-1', name: f.name, status: 'done',
           url: uri, thumbUrl: uri,
@@ -189,8 +174,6 @@ const DataManagement = forwardRef<DataManagementHandle, {
   };
 
   // 暴露方法给父组件
-  useImperativeHandle(ref, () => ({ openCreate, openEdit, handleDelete, handleExportSelected }), [fields, client, currentCollection, selectedRowKeys]);
-
   /** 提交表单（新增或编辑） */
   const handleSubmit = async () => {
     if (!client || !currentCollection) return;
@@ -256,7 +239,7 @@ const DataManagement = forwardRef<DataManagementHandle, {
           }
         }
 
-        await updateObject(client, currentCollection, id, values, vector, storeUrl);
+        await updateObject(client, currentCollection, id, values, vector, storeUrl, cred);
         message.success(t('updateSuccess'));
       } else {
         await insertObject(client, currentCollection, values);
@@ -271,15 +254,6 @@ const DataManagement = forwardRef<DataManagementHandle, {
       setSubmitting(false);
     }
   };
-
-  /** 文件转 Base64 */
-  const fileToBase64 = (file: File): Promise<string> =>
-    new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(reader.result as string);
-      reader.onerror = reject;
-      reader.readAsDataURL(file);
-    });
 
   /** 批量删除 */
   const handleBatchDelete = async () => {
@@ -319,7 +293,7 @@ const DataManagement = forwardRef<DataManagementHandle, {
     if (!client || !currentCollection) return;
     setExporting(true);
     try {
-      const { currentData, searchResults, searchQuery, paginationCurrent } = useAppStore.getState();
+      const { currentData, searchResults, searchQuery, paginationCurrent } = useDataStore.getState();
       const isSearchMode = searchResults.length > 0 || !!searchQuery.trim();
 
       let rowsToExport: Record<string, unknown>[] = [];
@@ -397,7 +371,7 @@ const DataManagement = forwardRef<DataManagementHandle, {
   /** 导出选中行为 CSV */
   const handleExportSelected = () => {
     if (!currentCollection || selectedRowKeys.length === 0) return;
-    const { currentData, searchResults, searchQuery } = useAppStore.getState();
+    const { currentData, searchResults, searchQuery } = useDataStore.getState();
     const isSearchMode = searchResults.length > 0 || !!searchQuery.trim();
     const displayData = isSearchMode ? searchResults : currentData;
     const selectedRows = displayData.filter((row) => selectedRowKeys.includes(row.__id as string));
@@ -515,6 +489,16 @@ const DataManagement = forwardRef<DataManagementHandle, {
 
     return <Input.TextArea rows={2} />;
   };
+
+  // 暴露方法给父组件 — 用 ref 模式避免函数每次 render 变化导致 handle 重建
+  const actionsRef = useRef({ openCreate, openEdit, handleDelete, handleExportSelected });
+  actionsRef.current = { openCreate, openEdit, handleDelete, handleExportSelected };
+  useImperativeHandle(ref, () => ({
+    openCreate: () => actionsRef.current.openCreate(),
+    openEdit: (record: Record<string, unknown>) => actionsRef.current.openEdit(record),
+    handleDelete: (id: string) => actionsRef.current.handleDelete(id),
+    handleExportSelected: () => actionsRef.current.handleExportSelected(),
+  }), []);
 
   return (
     <>

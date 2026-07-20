@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import {
   Button, Table, Tag, Modal, Form, Input, Select,
   Popconfirm, Space, message, Typography, Alert, Empty, Spin, Collapse, Switch,
@@ -7,18 +7,20 @@ import {
   AppstoreOutlined, PlusOutlined, DeleteOutlined, ReloadOutlined, ApiOutlined,
 } from '@ant-design/icons';
 import EmptyState from '../Common/EmptyState';
-import useAppStore from '../../stores/appStore';
+import { useConnectionStore } from '../../stores/connectionStore';
+import { useBridgeActions } from '../../hooks/useBridgeActions';
 import { useI18n } from '../../i18n/I18nProvider';
 import {
   getFullSchema, createCollection, deleteCollection, addProperty,
   PROPERTY_DATA_TYPES, type CollectionSchema, type CollectionProperty, type PropertyDataType,
-} from '../../services/weaviate';
+} from '../../services';
 
 const { Text } = Typography;
 
 const SchemaManager: React.FC = () => {
   const { t } = useI18n();
-  const { client, connectionStatus, refreshCollections } = useAppStore();
+  const { client, connectionStatus } = useConnectionStore();
+  const { refreshCollections } = useBridgeActions();
   const [schemas, setSchemas] = useState<CollectionSchema[]>([]);
   const [loading, setLoading] = useState(false);
 
@@ -39,7 +41,7 @@ const SchemaManager: React.FC = () => {
   const [propForm] = Form.useForm();
   const [propTarget, setPropTarget] = useState<string | null>(null);
 
-  const loadSchema = async () => {
+  const loadSchema = useCallback(async () => {
     if (!client) return;
     setLoading(true);
     try {
@@ -50,11 +52,12 @@ const SchemaManager: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- schema 数据不依赖语言，t 变化时不应重新加载
+  }, [client]);
 
   useEffect(() => {
     if (client) loadSchema();
-  }, [client]);
+  }, [client, loadSchema]);
 
   const handleCreate = async () => {
     if (!client) return;

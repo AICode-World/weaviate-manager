@@ -4,8 +4,9 @@ import { App as AntdApp, ConfigProvider, theme } from 'antd';
 import zhCN from 'antd/locale/zh_CN';
 import enUS from 'antd/locale/en_US';
 import { I18nProvider, useI18n } from './i18n/I18nProvider';
-import useAppStore from './stores/appStore';
+import { useThemeStore } from './stores/themeStore';
 import MainLayout from './components/Layout/MainLayout';
+import ErrorBoundary from './components/Common/ErrorBoundary';
 
 function getSystemDark(): boolean {
   if (typeof window === 'undefined') return false;
@@ -121,7 +122,7 @@ function buildDarkTokens(colorPrimary: string) {
 }
 
 const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { themeMode, themeColor } = useAppStore();
+  const { themeMode, themeColor } = useThemeStore();
   const [systemDark, setSystemDark] = useState(getSystemDark());
 
   useEffect(() => {
@@ -154,7 +155,9 @@ const AppContent: React.FC = () => {
     <ConfigProvider locale={lang === 'zh' ? zhCN : enUS}>
       <ThemeProvider>
         <AntdApp>
-          <MainLayout />
+          <ErrorBoundary>
+            <MainLayout />
+          </ErrorBoundary>
         </AntdApp>
       </ThemeProvider>
     </ConfigProvider>

@@ -1,14 +1,18 @@
 import { useState } from 'react';
 import { Button, Input, Form, App, Spin } from 'antd';
 import { ArrowRightOutlined } from '@ant-design/icons';
-import useAppStore from '../stores/appStore';
+import { useClusterStore } from '../stores/clusterStore';
+import { useDataStore } from '../stores/dataStore';
+import { useBridgeActions } from '../hooks/useBridgeActions';
 import { useI18n } from '../i18n/I18nProvider';
-import { createClient, testConnection, listCollections } from '../services/weaviate';
+import { createClient, testConnection, listCollections } from '../services';
 
 const OnboardingPage: React.FC = () => {
   const { t } = useI18n();
   const { message } = App.useApp();
-  const { saveCluster, setActiveCluster, setConnection, setCollections } = useAppStore();
+  const { saveCluster, setActiveCluster } = useClusterStore();
+  const { setCollections } = useDataStore();
+  const { setConnection } = useBridgeActions();
   const [form] = Form.useForm();
   const [loading, setLoading] = useState(false);
 

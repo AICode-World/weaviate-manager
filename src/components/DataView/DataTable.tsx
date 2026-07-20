@@ -1,30 +1,15 @@
-import { useEffect, useCallback } from 'react';
+import { useEffect, useCallback, useRef } from 'react';
 import { Table, Spin, Empty, Typography, Image, Space, Popconfirm, Tooltip, Alert, Button } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { EditOutlined, DeleteOutlined, ExportOutlined, CloseCircleOutlined } from '@ant-design/icons';
-import useAppStore from '../../stores/appStore';
-import { fetchObjects, searchBM25, searchNearText, deleteObject } from '../../services/weaviate';
+import { useConnectionStore } from '../../stores/connectionStore';
+import { useDataStore } from '../../stores/dataStore';
+import { fetchObjects, searchBM25, searchNearText, deleteObject } from '../../services';
+import { getMediaType, toDataUri } from '../../utils/media';
 import { App } from 'antd';
 import { useI18n } from '../../i18n/I18nProvider';
 
 const { Text } = Typography;
-
-function getMediaType(str: string): 'image' | 'video' | 'audio' | null {
-  const m = str.match(/^data:(image|video|audio)\//);
-  if (m) return m[1] as 'image' | 'video' | 'audio';
-  if (str.startsWith('/9j/') || str.startsWith('iVBOR') || str.startsWith('R0lGOD') || str.startsWith('UklGR')) return 'image';
-  return null;
-}
-
-function toDataUri(raw: string): string {
-  if (raw.startsWith('data:')) return raw;
-  const mime = raw.startsWith('/9j/') ? 'image/jpeg'
-    : raw.startsWith('iVBOR') ? 'image/png'
-    : raw.startsWith('R0lGOD') ? 'image/gif'
-    : raw.startsWith('UklGR') ? 'image/webp'
-    : 'image/jpeg';
-  return `data:${mime};base64,${raw}`;
-}
 
 function renderCell(value: unknown): React.ReactNode {
   if (value === null || value === undefined) return <Text type="secondary">—</Text>;
@@ -73,48 +58,62 @@ const DataTable: React.FC<{
 }> = ({ onEdit, onDelete, refreshKey, selectedRowKeys, onSelectionChange }) => {
   const { t } = useI18n();
   const { message } = App.useApp();
+  const { client } = useConnectionStore();
   const {
-    client, currentCollection, currentData, totalCount,
+    currentCollection, currentData, totalCount,
     isLoading, paginationCurrent,
     searchMode, searchQuery, searchResults, isSearching,
     setData, setLoading, setPaginationPage,
     setSearchResults, setSearching, clearSearch,
-  } = useAppStore();
+  } = useDataStore();
+
+  // 请求竞态防护：每次发起新请求时递增 token，旧请求返回时丢弃结果
+  const reqTokenRef = useRef(0);
 
   const loadData = useCallback(async (page: number, after?: string) => {
     if (!client || !currentCollection) return;
+    const token = ++reqTokenRef.current;
     setLoading(true);
     setSearchResults([]);
     try {
       const result = await fetchObjects(client, currentCollection, 20, after);
+      if (token !== reqTokenRef.current) return; // 已被新请求取代
       setData(result.objects, result.total, { after: result.after, before: result.before });
       setPaginationPage(page);
     } catch (e: unknown) {
+      if (token !== reqTokenRef.current) return;
       console.error('[DataTable] loadData error:', e);
       message.error(e instanceof Error ? e.message : t('loadFail'));
-    } finally { setLoading(false); }
+    } finally {
+      if (token === reqTokenRef.current) setLoading(false);
+    }
   }, [client, currentCollection, setData, setLoading, setPaginationPage, setSearchResults, t, message]);
 
   const loadSearchResults = useCallback(async () => {
     if (!client || !currentCollection || !searchQuery.trim()) return;
+    const token = ++reqTokenRef.current;
     setSearching(true);
     try {
       const results = searchMode === 'bm25'
         ? await searchBM25(client, currentCollection, searchQuery)
         : await searchNearText(client, currentCollection, searchQuery);
+      if (token !== reqTokenRef.current) return;
       setSearchResults(results);
     } catch (e: unknown) {
+      if (token !== reqTokenRef.current) return;
       message.error(e instanceof Error ? e.message : t('searchFail'));
-    } finally { setSearching(false); }
-  }, [client, currentCollection, searchQuery, searchMode, setSearchResults, setSearching]);
+    } finally {
+      if (token === reqTokenRef.current) setSearching(false);
+    }
+  }, [client, currentCollection, searchQuery, searchMode, setSearchResults, setSearching, t, message]);
 
   useEffect(() => {
     if (client && currentCollection) { clearSearch(); loadData(1); onSelectionChange([]); }
-  }, [currentCollection, refreshKey, client]);
+  }, [currentCollection, refreshKey, client, clearSearch, loadData, onSelectionChange]);
 
   useEffect(() => {
     if (searchQuery.trim()) loadSearchResults();
-  }, [searchQuery, searchMode, currentCollection]);
+  }, [searchQuery, searchMode, currentCollection, loadSearchResults]);
 
   const isSearchMode = searchResults.length > 0 || !!searchQuery.trim();
   const displayData = isSearchMode ? searchResults : currentData;
@@ -230,12 +229,12 @@ const DataTable: React.FC<{
                     if (!client || !currentCollection) return;
                     const total = selectedRowKeys.length;
                     let success = 0, fail = 0;
-                    const hide = message.loading({ content: t('batchProgress', { current: 0, total }), key: 'bd', duration: 0 });
                     for (let i = 0; i < selectedRowKeys.length; i++) {
+                      message.loading({ content: t('batchProgress', { current: i, total }), key: 'bd', duration: 0 });
                       try { await deleteObject(client, currentCollection, selectedRowKeys[i]); success++; } catch { fail++; }
                       message.loading({ content: t('batchProgress', { current: i + 1, total }), key: 'bd', duration: 0 });
                     }
-                    hide();
+                    message.destroy('bd');
                     message.info(t('deleteDone', { s: success, f: fail }));
                     onSelectionChange([]);
                     loadData(1);
@@ -270,24 +269,26 @@ const DataTable: React.FC<{
               if (!client || !currentCollection) return;
               if (page === paginationCurrent) return;
               onSelectionChange([]);
+              const token = ++reqTokenRef.current;
               setLoading(true);
               try {
-                // 向前翻：逐页获取 cursor
-                let after: string | undefined;
-                for (let i = 1; i < page; i++) {
-                  const r = await fetchObjects(client, currentCollection, 20, after);
-                  after = r.after ?? undefined;
-                }
-                const r = await fetchObjects(client, currentCollection, 20, after);
+                // 直接按 offset 跳转，避免逐页 cursor 累加造成 N+1 请求
+                const offset = (page - 1) * 20;
+                const r = await fetchObjects(client, currentCollection, 20, undefined, offset);
+                if (token !== reqTokenRef.current) return;
                 setData(r.objects, r.total, { after: r.after, before: r.before });
                 setPaginationPage(page);
               } catch (e: unknown) {
+                if (token !== reqTokenRef.current) return;
                 message.error(e instanceof Error ? e.message : t('paginationFail'));
-              } finally { setLoading(false); }
+              } finally {
+                if (token === reqTokenRef.current) setLoading(false);
+              }
             },
           }}
           size="middle"
-          scroll={{ x: 'max-content' }}
+          scroll={{ x: 'max-content', y: 600 }}
+          virtual
           locale={{ emptyText: <Empty description={t('noData')} style={{ padding: 40 }} /> }}
           rowSelection={{ selectedRowKeys, onChange: (keys) => onSelectionChange(keys as string[]) }}
           style={{ marginTop: 8 }}

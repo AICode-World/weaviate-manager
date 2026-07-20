@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { Card, Row, Col, Table, Button, Spin, Skeleton, App } from 'antd';
 import {
   DatabaseOutlined, FolderOpenOutlined,
@@ -7,7 +7,11 @@ import {
 import EmptyState from '../components/Common/EmptyState';
 import { Pie, Column } from '@ant-design/charts';
 import { useNavigate } from 'react-router-dom';
-import useAppStore from '../stores/appStore';
+import { useConnectionStore } from '../stores/connectionStore';
+import { useClusterStore } from '../stores/clusterStore';
+import { useDataStore } from '../stores/dataStore';
+import { useDashboardStore } from '../stores/dashboardStore';
+import { useThemeStore } from '../stores/themeStore';
 import { useI18n } from '../i18n/I18nProvider';
 
 // 根据品牌色动态生成图表色板（HSL 色相均匀分布）
@@ -59,24 +63,27 @@ const Dashboard: React.FC = () => {
   const { t } = useI18n();
   const navigate = useNavigate();
   const { message } = App.useApp();
-  const {
-    connectionStatus, client, collections,
-    dashboardData, dashboardLoading, themeColor,
-    setCurrentCollection, fetchDashboardData,
-    activeClusterId, clusters,
-  } = useAppStore();
+  const { connectionStatus, client } = useConnectionStore();
+  const { clusters, activeClusterId } = useClusterStore();
+  const { collections, setCurrentCollection } = useDataStore();
+  const { dashboardData, dashboardLoading, fetchDashboardData } = useDashboardStore();
+  const { themeColor } = useThemeStore();
 
   const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
+  const reqTokenRef = useRef(0);
 
   useEffect(() => {
     if (client) {
-      fetchDashboardData().then(() => setHasLoadedOnce(true));
+      const token = ++reqTokenRef.current;
+      fetchDashboardData(client).then(() => {
+        if (token === reqTokenRef.current) setHasLoadedOnce(true);
+      });
     }
   }, [client, fetchDashboardData]);
 
   const handleRefresh = async () => {
     try {
-      await fetchDashboardData();
+      await fetchDashboardData(client);
     } catch {
       message.error(t('loadFail'));
     }
@@ -142,12 +149,10 @@ const Dashboard: React.FC = () => {
     {
       icon: <FolderOpenOutlined />, iconBg: 'rgba(22,119,255,0.1)', iconColor: '#1677ff',
       value: dashboardData?.totalCollections ?? 0, label: t('totalCollections'),
-      trend: { direction: 'up', text: `↑ ${collections.length} ${t('thisWeek')}` },
     },
     {
       icon: <DatabaseOutlined />, iconBg: 'rgba(16,185,129,0.1)', iconColor: '#10b981',
       value: dashboardData?.totalObjects?.toLocaleString() ?? 0, label: t('totalObjects'),
-      trend: { direction: 'up', text: `↑ ${t('todayLabel')}` },
     },
     {
       icon: <AppstoreOutlined />, iconBg: 'rgba(245,158,11,0.1)', iconColor: '#f59e0b',

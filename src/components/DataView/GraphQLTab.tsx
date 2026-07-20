@@ -5,15 +5,17 @@ import {
   CodeOutlined, FolderOpenOutlined, PlusOutlined, DeleteOutlined,
   ThunderboltOutlined, DownOutlined, UpOutlined,
 } from '@ant-design/icons';
-import useAppStore from '../../stores/appStore';
+import { useConnectionStore } from '../../stores/connectionStore';
 import { useQueryHistoryStore, type QueryRecord } from '../../stores/queryHistoryStore';
 import { useQueryTemplateStore, type QueryTemplate } from '../../stores/queryTemplateStore';
 import QueryHistoryPanel from './QueryHistoryPanel';
 import QueryTemplatePanel from './QueryTemplatePanel';
 import DiffViewModal from './DiffViewModal';
-import { getClassProperties, listCollections } from '../../services/weaviate';
+import { getCachedClassProperties, listCollections } from '../../services';
+import { createGraphQLCompletionProvider, type SchemaData } from './graphqlCompletion';
 import { useI18n } from '../../i18n/I18nProvider';
 import { initMonaco } from '../../monacoSetup';
+import type { Monaco } from '@monaco-editor/react';
 
 const Editor = lazy(async () => {
   await initMonaco();
@@ -90,7 +92,7 @@ function buildParamsString(rows: VarRow[]): string {
     .map((r) => {
       const val = r.value.trim();
       // Smart quoting: numbers, booleans, already-quoted, objects/arrays stay raw
-      const isRaw = /^(true|false|-?\d+\.?\d*)$/.test(val) || /^["\[{]/.test(val) || val === '';
+      const isRaw = /^(true|false|-?\d+\.?\d*)$/.test(val) || /^["[{]/.test(val) || val === '';
       const finalVal = isRaw ? val : `"${val}"`;
       return `${r.key.trim()}: ${finalVal}`;
     })
@@ -190,7 +192,7 @@ const PanelHeader: React.FC<{
 // ── Main Component ──
 const GraphQLTab: React.FC = () => {
   const { t } = useI18n();
-  const { client, url, cred } = useAppStore();
+  const { client, url, cred } = useConnectionStore();
   const [query, setQuery] = useState('{\n  Get {\n    \n  }\n}');
   const [varRows, setVarRows] = useState<VarRow[]>([{ key: '', value: '', enabled: true }]);
   const [result, setResult] = useState<unknown>(null);
@@ -218,6 +220,12 @@ const GraphQLTab: React.FC = () => {
   const topRef = useRef<HTMLDivElement>(null);
   const outerRef = useRef<HTMLDivElement>(null);
 
+  // GraphQL auto-complete
+  const schemaRef = useRef<SchemaData>({ collections: [], properties: new Map() });
+  const completionProviderRef = useRef<{ dispose: () => void } | null>(null);
+  const monacoRef = useRef<Monaco | null>(null);
+  const [schemaLoaded, setSchemaLoaded] = useState(false);
+
   const addQuery = useQueryHistoryStore((s) => s.addQuery);
   const addTemplate = useQueryTemplateStore((s) => s.addTemplate);
 
@@ -227,6 +235,44 @@ const GraphQLTab: React.FC = () => {
   useEffect(() => {
     if (client) listCollections(client).then(setCollections).catch(() => {});
   }, [client]);
+
+  // Load schema for auto-complete (uses cache to avoid redundant requests)
+  useEffect(() => {
+    if (!client || collections.length === 0) return;
+    const propsMap = new Map<string, string[]>();
+    Promise.all(
+      collections.map(async (name) => {
+        try {
+          const propNames = await getCachedClassProperties(client, name);
+          propsMap.set(name, propNames);
+        } catch {
+          propsMap.set(name, []);
+        }
+      }),
+    ).then(() => {
+      schemaRef.current = { collections, properties: propsMap };
+      setSchemaLoaded(true);
+    });
+  }, [client, collections]);
+
+  // Register completion provider when both Monaco and schema are ready.
+  // Re-register when schema data changes (collections list updated).
+  useEffect(() => {
+    const monaco = monacoRef.current;
+    if (!monaco || !schemaLoaded) return;
+
+    // Dispose previous provider before registering a new one
+    completionProviderRef.current?.dispose();
+    completionProviderRef.current = monaco.languages.registerCompletionItemProvider(
+      'graphql',
+      createGraphQLCompletionProvider(schemaRef.current),
+    );
+
+    return () => {
+      completionProviderRef.current?.dispose();
+      completionProviderRef.current = null;
+    };
+  }, [schemaLoaded, collections]);
 
   // ── Drag logic ──
   const handleMouseMove = useCallback((e: MouseEvent) => {
@@ -263,8 +309,8 @@ const GraphQLTab: React.FC = () => {
     // Default variables: limit
     const defaultRows: VarRow[] = [{ key: 'limit', value: '10', enabled: true }];
     try {
-      const props = await getClassProperties(client, name);
-      const fields = props.map((p) => `      ${p.name}`).join('\n');
+      const propNames = await getCachedClassProperties(client, name);
+      const fields = propNames.map((p) => `      ${p}`).join('\n');
       const baseQuery = `{\n  Get {\n    ${name}() {\n${fields}\n      _additional {\n        id\n      }\n    }\n  }\n}`;
       // Sync params into the query immediately
       setQuery(syncQueryParams(baseQuery, name, defaultRows));
@@ -455,6 +501,17 @@ const GraphQLTab: React.FC = () => {
                 theme="vs"
                 value={query}
                 onChange={(val) => setQuery(val || '')}
+                onMount={(_, monaco) => {
+                  monacoRef.current = monaco;
+                  // If schema is already loaded, register immediately
+                  if (schemaLoaded) {
+                    completionProviderRef.current?.dispose();
+                    completionProviderRef.current = monaco.languages.registerCompletionItemProvider(
+                      'graphql',
+                      createGraphQLCompletionProvider(schemaRef.current),
+                    );
+                  }
+                }}
                 options={{
                   minimap: { enabled: false },
                   fontSize: 14,

@@ -1,14 +1,18 @@
 import { Badge, Typography, Space } from 'antd';
-import useAppStore from '../../stores/appStore';
+import { useConnectionStore } from '../../stores/connectionStore';
+import { useClusterStore } from '../../stores/clusterStore';
+import { useDataStore } from '../../stores/dataStore';
 import { useI18n } from '../../i18n/I18nProvider';
 
 const { Text } = Typography;
 
 const ConnectionManager: React.FC = () => {
   const { t } = useI18n();
-  const store = useAppStore();
+  const { connectionStatus } = useConnectionStore();
+  const { clusters, activeClusterId } = useClusterStore();
+  const { collections } = useDataStore();
 
-  const activeCluster = store.clusters.find((c) => c.id === store.activeClusterId);
+  const activeCluster = clusters.find((c) => c.id === activeClusterId);
 
   const statusMap = {
     disconnected: { status: 'default' as const, text: t('disconnected') },
@@ -16,7 +20,7 @@ const ConnectionManager: React.FC = () => {
     error: { status: 'error' as const, text: t('failed') },
   };
 
-  const { status, text } = statusMap[store.connectionStatus];
+  const { status, text } = statusMap[connectionStatus];
 
   return (
     <div style={{
@@ -33,7 +37,7 @@ const ConnectionManager: React.FC = () => {
           </Text>
           <Text type="secondary" style={{ fontSize: 11 }}>
             {text}
-            {store.connectionStatus === 'connected' && ` · ${store.collections.length} ${t('collections')}`}
+            {connectionStatus === 'connected' && ` · ${collections.length} ${t('collections')}`}
           </Text>
         </div>
       </Space>

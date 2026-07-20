@@ -84,6 +84,7 @@ const AppTour: React.FC<AppTourProps> = ({ refs }) => {
   );
 };
 
+/* eslint-disable react-refresh/only-export-components -- 小工具函数与组件共存 */
 export default AppTour;
 
 export const markTourDone = () => localStorage.setItem(TOUR_DONE_KEY, '1');
